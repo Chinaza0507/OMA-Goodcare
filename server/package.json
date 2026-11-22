@@ -8,7 +8,9 @@
     "dev": "nodemon src/index.js",
     "migrate": "node src/scripts/migrate.js",
     "seed": "node src/scripts/seed.js",
-    "create-user": "node src/scripts/create-user.js"
+    "create-admin": "node src/scripts/create-admin.js",
+    "db:reset": "node src/scripts/reset.js",
+    "test": "node --test test/flow.test.js"
   },
   "author": "",
   "license": "ISC",
