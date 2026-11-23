@@ -6,7 +6,7 @@ import { AppError } from '../lib/errors.js'
 import { logAction } from '../lib/log.js'
 import { hashSecret } from '../lib/secret.js'
 import { toMinutes } from '../lib/time.js'
-import { phoneField } from './auth.js'
+import { emailField } from './auth.js'
 
 // Clinic manager: set up the clinic they belong to. Everything is scoped to req.user.clinicId,
 // and every change goes in the action log.
@@ -72,7 +72,7 @@ router.get('/clinic', async (req, res) => {
   const { rows: c } = await query('SELECT * FROM clinics WHERE id = $1', [req.user.clinicId])
   const { rows: depts } = await query('SELECT * FROM departments WHERE clinic_id = $1 ORDER BY name', [req.user.clinicId])
   const { rows: staff } = await query(
-    `SELECT id, name, phone, role, active FROM users WHERE clinic_id = $1 ORDER BY role, name`,
+    `SELECT id, name, email, role, active FROM users WHERE clinic_id = $1 ORDER BY role, name`,
     [req.user.clinicId],
   )
   res.json({
@@ -182,15 +182,15 @@ router.patch('/departments/:id', async (req, res) => {
 // Staff accounts for this clinic (front-desk staff only; managers are created at registration).
 router.post('/staff', async (req, res) => {
   const d = z
-    .object({ name: z.string().trim().min(2).max(100), phone: phoneField, password: z.string().min(8).max(72) })
+    .object({ name: z.string().trim().min(2).max(100), email: emailField, password: z.string().min(8).max(72) })
     .parse(req.body)
   const hash = await hashSecret(d.password)
   try {
     const user = await withTx(async (db) => {
       const { rows } = await db.query(
-        `INSERT INTO users (role, name, phone, secret_hash, clinic_id) VALUES ('staff', $1, $2, $3, $4)
-         RETURNING id, name, phone, role, active`,
-        [d.name, d.phone, hash, req.user.clinicId],
+        `INSERT INTO users (role, name, email, secret_hash, clinic_id) VALUES ('staff', $1, $2, $3, $4)
+         RETURNING id, name, email, role, active`,
+        [d.name, d.email, hash, req.user.clinicId],
       )
       await logAction(db, {
         clinicId: req.user.clinicId,
@@ -202,7 +202,7 @@ router.post('/staff', async (req, res) => {
     })
     res.status(201).json({ staff: user })
   } catch (err) {
-    if (err.code === '23505') throw new AppError(409, 'phone_taken')
+    if (err.code === '23505') throw new AppError(409, 'email_taken')
     throw err
   }
 })
@@ -213,7 +213,7 @@ router.patch('/staff/:id', async (req, res) => {
   const user = await withTx(async (db) => {
     const { rows } = await db.query(
       `UPDATE users SET active = $3 WHERE id = $1 AND clinic_id = $2 AND role = 'staff'
-       RETURNING id, name, phone, role, active`,
+       RETURNING id, name, email, role, active`,
       [id, req.user.clinicId, active],
     )
     if (!rows[0]) throw new AppError(404, 'not_found')

@@ -19,6 +19,8 @@ const clinicJson = (c) => ({
   state: c.state,
   area: c.area,
   address: c.address,
+  landmark: c.landmark,
+  email: c.email,
   status: c.status,
   active: c.active,
   createdAt: c.created_at,

@@ -33,6 +33,7 @@ export const phoneField = z
 const registerSchema = z.object({
   name: z.string().trim().min(2).max(100),
   phone: phoneField,
+  email: z.string().trim().toLowerCase().email().max(200).optional(),
   pin: z.string().regex(/^\d{4}$/, 'PIN must be 4 digits'),
   language: z.enum(LANGUAGES).default('en'),
   consent: z.literal(true), // NDPA consent is required at sign-up
@@ -41,6 +42,13 @@ const registerSchema = z.object({
 const loginSchema = z.object({
   phone: phoneField,
   secret: z.string().min(4).max(72),
+})
+
+export const emailField = z.string().trim().toLowerCase().email().max(200)
+
+const workLoginSchema = z.object({
+  email: emailField,
+  password: z.string().min(1).max(72),
 })
 
 const updateSchema = z.object({
@@ -53,6 +61,7 @@ export const publicUser = (u) => ({
   id: u.id,
   name: u.name,
   phone: u.phone,
+  email: u.email,
   role: u.role,
   language: u.language,
   alertAhead: u.alert_ahead,
@@ -70,9 +79,9 @@ router.post('/register', authLimiter, async (req, res) => {
   try {
     const user = await withTx(async (db) => {
       const { rows } = await db.query(
-        `INSERT INTO users (role, name, phone, secret_hash, language, consent_at)
-         VALUES ('patient', $1, $2, $3, $4, now()) RETURNING *`,
-        [data.name, data.phone, hash, data.language],
+        `INSERT INTO users (role, name, phone, email, secret_hash, language, consent_at)
+         VALUES ('patient', $1, $2, $3, $4, $5, now()) RETURNING *`,
+        [data.name, data.phone, data.email ?? null, hash, data.language],
       )
       // Every account starts with the owner as their own "family member" so booking
       // for yourself and for family work the same way.
@@ -89,11 +98,9 @@ router.post('/register', authLimiter, async (req, res) => {
   }
 })
 
-router.post('/login', authLimiter, async (req, res) => {
-  const { phone, secret } = loginSchema.parse(req.body)
-  const { rows } = await query('SELECT * FROM users WHERE phone = $1', [phone])
-  const user = rows[0]
-
+// Shared by both sign-ins: lockout after repeated failures, constant-time-ish when the
+// account does not exist, and the same error either way so accounts cannot be probed.
+async function signIn(user, secret) {
   if (user && !user.active) throw new AppError(403, 'account_disabled')
   if (user?.locked_until && new Date(user.locked_until) > new Date()) {
     throw new AppError(429, 'account_locked', { until: user.locked_until })
@@ -117,7 +124,28 @@ router.post('/login', authLimiter, async (req, res) => {
   if (user.failed_attempts > 0 || user.locked_until) {
     await query('UPDATE users SET failed_attempts = 0, locked_until = NULL WHERE id = $1', [user.id])
   }
-  res.json({ token: signToken(user), user: publicUser(user) })
+  return { token: signToken(user), user: publicUser(user) }
+}
+
+// Patients: phone number + 4-digit PIN.
+router.post('/login', authLimiter, async (req, res) => {
+  const { phone, secret } = loginSchema.parse(req.body)
+  const { rows } = await query(`SELECT * FROM users WHERE phone = $1 AND role = 'patient'`, [phone])
+  res.json(await signIn(rows[0], secret))
+})
+
+// Hospitals (front desk), staff and Oma admins: official email + password.
+router.post('/work-login', authLimiter, async (req, res) => {
+  const { email, password } = workLoginSchema.parse(req.body)
+  const { rows } = await query(
+    `SELECT u.*, c.name AS clinic_name, c.status AS clinic_status FROM users u
+     LEFT JOIN clinics c ON c.id = u.clinic_id
+     WHERE lower(u.email) = $1 AND u.role <> 'patient'`,
+    [email],
+  )
+  const result = await signIn(rows[0], password)
+  const u = rows[0]
+  res.json({ ...result, clinic: u.clinic_id ? { id: u.clinic_id, name: u.clinic_name, status: u.clinic_status } : null })
 })
 
 router.get('/me', requireAuth, async (req, res) => {
@@ -131,8 +159,14 @@ router.get('/me', requireAuth, async (req, res) => {
      WHERE t.user_id = $1 AND (t.miss_count > 0 OR t.blocked_until > now())`,
     [req.user.id],
   )
+  let clinic = null
+  if (rows[0].clinic_id) {
+    const { rows: c } = await query('SELECT id, name, status FROM clinics WHERE id = $1', [rows[0].clinic_id])
+    clinic = c[0] ?? null
+  }
   res.json({
     user: publicUser(rows[0]),
+    clinic,
     noShowStatus: tracking.map((t) => ({
       clinicId: t.clinic_id,
       clinicName: t.clinic_name,

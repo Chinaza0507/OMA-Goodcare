@@ -49,7 +49,7 @@ const today = todayLagos()
 const tomorrow = addDays(today, 1)
 const hospital = (over = {}) => ({
   hospitalName: 'Test General Hospital', type: 'private', state: 'Lagos', area: 'Yaba',
-  address: '1 Test Road', managerName: 'Manager One', managerPhone: '08031110001', password: 'managerpass1', ...over,
+  address: '1 Test Road', landmark: 'Opposite the market', email: 'frontdesk@testgeneral.example.com', password: 'managerpass1', ...over,
 })
 const register = (name, phone, pin = '1234') => api('POST', '/api/auth/register', { name, phone, pin, consent: true })
 const freeSlots = async (deptId, date = today) =>
@@ -78,7 +78,7 @@ describe('Oma backend', () => {
 
   test('hospital signs up and stays hidden until an admin approves', async () => {
     expectErr(await api('POST', '/api/hospitals/register', hospital({ type: 'clinic' })), 400, 'invalid_input')
-    expectErr(await api('POST', '/api/hospitals/register', hospital({ managerPhone: '123' })), 400, 'invalid_phone')
+    expectErr(await api('POST', '/api/hospitals/register', hospital({ email: 'not-an-email' })), 400, 'invalid_input')
     expectErr(await api('POST', '/api/hospitals/register', hospital({ password: 'short' })), 400, 'invalid_input')
 
     const r = await api('POST', '/api/hospitals/register', hospital({ latitude: 6.5158, longitude: 3.3711 }))
@@ -88,17 +88,23 @@ describe('Oma backend', () => {
     S.clinicA = r.body.clinic.id
     S.managerA = r.body.user && r.body.token
 
-    expectErr(await api('POST', '/api/hospitals/register', hospital()), 409, 'phone_taken')
+    expectErr(await api('POST', '/api/hospitals/register', hospital({ email: 'FrontDesk@TestGeneral.example.com' })), 409, 'email_taken')
+
+    // The hospital signs in with its official email; the patient sign-in does not accept it.
+    const signIn = await api('POST', '/api/auth/work-login', { email: 'frontdesk@testgeneral.example.com', password: 'managerpass1' })
+    expectOk(signIn)
+    assert.equal(signIn.body.clinic.status, 'pending')
+    expectErr(await api('POST', '/api/auth/work-login', { email: 'frontdesk@testgeneral.example.com', password: 'wrongpass1' }), 401, 'bad_credentials')
     assert.deepEqual((await api('GET', '/api/clinics')).body.clinics, []) // hidden while pending
     expectErr(await api('GET', `/api/clinics/${S.clinicA}`), 404, 'not_found')
   })
 
   test('only an Oma admin can approve, and the type sets the billing rule', async () => {
     await pool.query(
-      `INSERT INTO users (role, name, phone, secret_hash, consent_at) VALUES ('admin', 'Oma Admin', '+2348031110099', $1, now())`,
+      `INSERT INTO users (role, name, email, secret_hash, consent_at) VALUES ('admin', 'Oma Admin', 'admin@oma.example.com', $1, now())`,
       [await hashSecret('adminpass123')],
     )
-    const login = await api('POST', '/api/auth/login', { phone: '08031110099', secret: 'adminpass123' })
+    const login = await api('POST', '/api/auth/work-login', { email: 'admin@oma.example.com', password: 'adminpass123' })
     expectOk(login)
     S.admin = login.body.token
 
@@ -124,10 +130,10 @@ describe('Oma backend', () => {
     await api('PATCH', '/api/manager/clinic', { type: 'school', graceMinutes: 10 }, S.managerA)
     assert.equal((await api('GET', '/api/manager/clinic', undefined, S.managerA)).body.clinic.type, 'private')
 
-    const staff = await api('POST', '/api/manager/staff', { name: 'Nurse Joy', phone: '08031110002', password: 'staffpass12' }, S.managerA)
+    const staff = await api('POST', '/api/manager/staff', { name: 'Nurse Joy', email: 'joy@testgeneral.example.com', password: 'staffpass12' }, S.managerA)
     expectOk(staff, 201)
     S.staffId = staff.body.staff.id
-    const login = await api('POST', '/api/auth/login', { phone: '08031110002', secret: 'staffpass12' })
+    const login = await api('POST', '/api/auth/work-login', { email: 'joy@testgeneral.example.com', password: 'staffpass12' })
     expectOk(login)
     S.staffA = login.body.token
   })
@@ -367,7 +373,7 @@ describe('Oma backend', () => {
   })
 
   test('staff are limited to their own hospital and attempts are logged', async () => {
-    const h2 = await api('POST', '/api/hospitals/register', hospital({ hospitalName: 'Other Clinic', managerPhone: '08031110050' }))
+    const h2 = await api('POST', '/api/hospitals/register', hospital({ hospitalName: 'Other Clinic', email: 'desk@otherclinic.example.com' }))
     S.managerB = h2.body.token
     S.clinicB = h2.body.clinic.id
     expectErr(await api('POST', `/api/staff/appointments/${S.apptAda.id}/check-in`, {}, S.managerB), 403, 'not_authorised_for_clinic')
@@ -378,8 +384,8 @@ describe('Oma backend', () => {
   })
 
   test('school clinic: no deposit, warning after 1st no-show, 7-day block after 2nd, walk-ins still allowed', async () => {
-    await api('POST', '/api/hospitals/register', hospital({ hospitalName: 'Test School Clinic', type: 'school', area: 'Akoka', managerPhone: '08031110060' }))
-    const mgr = (await api('POST', '/api/auth/login', { phone: '08031110060', secret: 'managerpass1' })).body
+    await api('POST', '/api/hospitals/register', hospital({ hospitalName: 'Test School Clinic', type: 'school', area: 'Akoka', email: 'clinic@testschool.example.com' }))
+    const mgr = (await api('POST', '/api/auth/work-login', { email: 'clinic@testschool.example.com', password: 'managerpass1' })).body
     const clinicId = mgr.user.clinicId
     expectOk(await api('POST', `/api/admin/clinics/${clinicId}/approve`, {}, S.admin))
     const d = await api('POST', '/api/manager/departments', { name: 'GOPD', consultationFee: null, opensAt: '00:00', closesAt: '23:50', slotMinutes: 10, avgVisitMinutes: 10 }, mgr.token)
@@ -425,7 +431,7 @@ describe('Oma backend', () => {
     expectOk(await api('GET', '/api/staff/today', undefined, S.staffA))
     expectOk(await api('PATCH', `/api/manager/staff/${S.staffId}`, { active: false }, S.managerA))
     expectErr(await api('GET', '/api/staff/today', undefined, S.staffA), 403, 'account_disabled')
-    expectErr(await api('POST', '/api/auth/login', { phone: '08031110002', secret: 'staffpass12' }), 403, 'account_disabled')
+    expectErr(await api('POST', '/api/auth/work-login', { email: 'joy@testgeneral.example.com', password: 'staffpass12' }), 403, 'account_disabled')
   })
 
   test('the Kolo history and action log cannot be edited or deleted', async () => {
