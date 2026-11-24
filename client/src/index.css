@@ -91,3 +91,10 @@ input:focus:not(.no-ring) { outline: 3px solid var(--color-plum-soft); outline-o
   .step-in { animation: omaStep 0.35s ease-out both; }
 }
 @keyframes omaStep { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }
+
+/* Kolo piggy bank: a coin drops into the slot, then the pig wiggles. */
+@keyframes koloCoin { 0% { transform: translateY(-46px); opacity: 0; } 25% { opacity: 1; } 70% { transform: translateY(22px); opacity: 1; } 100% { transform: translateY(30px); opacity: 0; } }
+@keyframes koloWiggle { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-4deg); } 50% { transform: rotate(3deg); } 75% { transform: rotate(-2deg); } }
+.kolo-coin { animation: koloCoin 0.9s ease-in both; }
+.kolo-wiggle { animation: koloWiggle 0.6s ease-in-out 0.75s both; transform-origin: 50% 80%; }
+@media (prefers-reduced-motion: reduce) { .kolo-coin { display: none; } .kolo-wiggle { animation: none; } }

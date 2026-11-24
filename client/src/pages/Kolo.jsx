@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom'
 import { gsap } from 'gsap'
 import { useGSAP } from '@gsap/react'
 import PatientShell from '../components/PatientShell.jsx'
+import Piggy from '../components/Piggy.jsx'
 import { api } from '../api.js'
 import { useAuth } from '../auth.jsx'
 import { useT } from '../i18n/index.jsx'
@@ -10,7 +11,6 @@ import { useT } from '../i18n/index.jsx'
 gsap.registerPlugin(useGSAP)
 
 const naira = (n) => `₦${Number(n || 0).toLocaleString('en-NG')}`
-const QUICK = [500, 1000, 2000, 5000]
 const when = (iso) => new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Africa/Lagos' }).format(new Date(iso))
 
 // How each kind of Kolo movement looks: sign, colour and icon.
@@ -41,8 +41,8 @@ export default function Kolo() {
   const { user, checking } = useAuth()
   const [kolo, setKolo] = useState(null)
   const [history, setHistory] = useState(null)
-  const [amount, setAmount] = useState(1000)
   const [custom, setCustom] = useState('')
+  const [drop, setDrop] = useState(0)
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState(null) // { ok: boolean, text }
 
@@ -53,7 +53,7 @@ export default function Kolo() {
   }, [])
   useEffect(() => { if (user) load().catch(() => setNote({ ok: false, text: t('dash.loadError') })) }, [user, load, t])
 
-  const chosen = custom ? Number(custom.replace(/\D/g, '')) : amount
+  const chosen = Number(custom.replace(/\D/g, ''))
   const valid = Number.isInteger(chosen) && chosen >= 100 && chosen <= 100000
 
   async function addMoney(e) {
@@ -64,6 +64,7 @@ export default function Kolo() {
     try {
       await api('/kolo/topup', { method: 'POST', body: { amount: chosen } })
       await load()
+      setDrop((n) => n + 1) // coin drops into the Kolo
       setCustom('')
       setNote({ ok: true, text: t('koloPage.added').replace('{amount}', naira(chosen)) })
     } catch (err) {
@@ -86,15 +87,20 @@ export default function Kolo() {
 
         <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
           <div className="flex flex-col gap-5">
-            {/* Balance */}
+            {/* Balance with the Kolo piggy bank */}
             <section className="relative overflow-hidden rounded-[28px] bg-[linear-gradient(150deg,var(--color-plum)_0%,var(--color-plum-dark)_100%)] p-6 text-white shadow-[0_24px_50px_rgba(90,45,176,0.25)] sm:p-7">
               <div aria-hidden="true" className="pointer-events-none absolute -right-14 -top-14 h-52 w-52 rounded-full bg-white/[0.07]" />
-              <span className="relative text-sm font-semibold text-white/80">{t('koloPage.available')}</span>
-              <div className="relative mt-1"><Balance value={kolo?.available ?? 0} className="font-display text-[44px] font-extrabold leading-none" /></div>
-              <div className="relative mt-5 flex flex-wrap items-center gap-3">
-                <span className="rounded-full bg-white/15 px-3.5 py-1.5 text-sm">{t('koloPage.reserved')}: <b>{naira(kolo?.reserved ?? 0)}</b></span>
+              <div className="relative flex flex-col items-center gap-5 sm:flex-row sm:gap-7">
+                <Piggy drop={drop} size={150} />
+                <div className="text-center sm:text-left">
+                  <span className="text-sm font-semibold text-white/80">{t('koloPage.available')}</span>
+                  <div className="mt-1"><Balance value={kolo?.available ?? 0} className="font-display text-[44px] font-extrabold leading-none" /></div>
+                  {(kolo?.reserved ?? 0) > 0 && (
+                    <span className="mt-3 inline-block rounded-full bg-white/15 px-3.5 py-1.5 text-sm">{t('koloPage.reserved')}: <b>{naira(kolo.reserved)}</b></span>
+                  )}
+                </div>
               </div>
-              <p className="relative m-0 mt-4 text-xs text-white/75">{t('koloPage.simulated')}</p>
+              <p className="relative m-0 mt-5 text-center text-xs text-white/75 sm:text-left">{t('koloPage.simulated')}</p>
             </section>
 
             {/* History */}
@@ -132,23 +138,13 @@ export default function Kolo() {
             {/* Add money */}
             <form onSubmit={addMoney} className="flex flex-col gap-4 rounded-[24px] bg-white p-5 ring-1 ring-line sm:p-6">
               <h2 className="m-0 text-lg font-bold">{t('koloPage.addTitle')}</h2>
-              <div className="grid grid-cols-2 gap-2.5">
-                {QUICK.map((n) => {
-                  const on = !custom && amount === n
-                  return (
-                    <button key={n} type="button" aria-pressed={on} onClick={() => { setAmount(n); setCustom(''); setNote(null) }}
-                      className={`min-h-12 cursor-pointer rounded-2xl border-[1.5px] font-display text-base font-bold transition-colors ${on ? 'border-plum bg-plum-tint text-plum' : 'border-line bg-white text-ink hover:border-plum-soft'}`}>
-                      {naira(n)}
-                    </button>
-                  )
-                })}
-              </div>
               <label className="flex flex-col gap-1.5">
-                <span className="text-sm font-semibold">{t('koloPage.other')}</span>
+                <span className="text-[15px] font-semibold">{t('koloPage.amountLabel')}</span>
                 <span className="relative">
-                  <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 font-bold text-muted">₦</span>
-                  <input inputMode="numeric" value={custom} onChange={(e) => { setCustom(e.target.value.replace(/\D/g, '').slice(0, 6)); setNote(null) }}
-                    placeholder={t('koloPage.amountPh')} className="min-h-12 w-full rounded-[14px] border-[1.5px] border-line bg-white pl-8 pr-3 text-base text-ink" />
+                  <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 font-display text-xl font-bold text-muted">₦</span>
+                  <input inputMode="numeric" value={custom ? Number(custom).toLocaleString('en-NG') : ''} onChange={(e) => { setCustom(e.target.value.replace(/\D/g, '').slice(0, 6)); setNote(null) }}
+                    placeholder={t('koloPage.amountPh')} aria-label={t('koloPage.amountLabel')}
+                    className="min-h-14 w-full rounded-2xl border-[1.5px] border-line bg-white pl-10 pr-4 font-display text-2xl font-bold text-ink" />
                 </span>
               </label>
               {note && <p role={note.ok ? 'status' : 'alert'} className={`m-0 text-sm font-semibold ${note.ok ? 'text-[#1d6b3a]' : 'text-rose'}`}>{note.text}</p>}
