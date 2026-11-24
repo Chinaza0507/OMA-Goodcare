@@ -99,7 +99,7 @@ export async function queueInfo(ctx: QueryCtx, appt: Doc<'appointments'>) {
 // ---------- booking ----------
 // Patients book a booking day up to MAX_DAYS_AHEAD days ahead (today counts as day 0).
 export const MAX_DAYS_AHEAD = 2
-export const STEP_MINUTES = 15
+export const STEP_MINUTES = 30 // start times every 30 minutes: 7:00, 7:30, 8:00…
 export const addDays = (date: string, days: number) => {
   const d = new Date(`${date}T12:00:00Z`)
   d.setUTCDate(d.getUTCDate() + days)
