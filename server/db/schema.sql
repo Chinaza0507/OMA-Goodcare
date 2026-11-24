@@ -7,6 +7,8 @@ CREATE TABLE IF NOT EXISTS clinics (
   state                 TEXT,
   area                  TEXT,
   address               TEXT,
+  landmark              TEXT,
+  email                 TEXT,                     -- the hospital's official email
   latitude              DOUBLE PRECISION CHECK (latitude BETWEEN -90 AND 90),
   longitude             DOUBLE PRECISION CHECK (longitude BETWEEN -180 AND 180),
   -- New hospitals register themselves as pending and stay hidden from patients until an Oma admin approves.
@@ -39,7 +41,8 @@ CREATE TABLE IF NOT EXISTS users (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   role            TEXT NOT NULL CHECK (role IN ('patient', 'staff', 'manager', 'admin')),
   name            TEXT NOT NULL,
-  phone           TEXT NOT NULL UNIQUE,            -- normalised to +234XXXXXXXXXX
+  phone           TEXT UNIQUE,                     -- patients: normalised to +234XXXXXXXXXX
+  email           TEXT,                            -- hospital, staff and admin sign-in; optional for patients
   secret_hash     TEXT NOT NULL,                   -- patients: 4-digit PIN; staff: password
   language        TEXT NOT NULL DEFAULT 'en' CHECK (language IN ('en', 'pcm', 'yo', 'ig', 'ha')),
   alert_ahead     INTEGER NOT NULL DEFAULT 3 CHECK (alert_ahead BETWEEN 1 AND 10),
@@ -51,6 +54,19 @@ CREATE TABLE IF NOT EXISTS users (
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   CHECK (role NOT IN ('staff', 'manager') OR clinic_id IS NOT NULL)
 );
+
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE users ALTER COLUMN phone DROP NOT NULL;
+ALTER TABLE clinics ADD COLUMN IF NOT EXISTS landmark TEXT;
+ALTER TABLE clinics ADD COLUMN IF NOT EXISTS email TEXT;
+-- Patients sign in with phone + PIN; hospital, staff and admin accounts with email + password.
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_sign_in_check') THEN
+    ALTER TABLE users ADD CONSTRAINT users_sign_in_check
+      CHECK ((role = 'patient' AND phone IS NOT NULL) OR (role <> 'patient' AND email IS NOT NULL));
+  END IF;
+END $$;
+CREATE UNIQUE INDEX IF NOT EXISTS users_work_email_idx ON users (lower(email)) WHERE role <> 'patient';
 
 CREATE INDEX IF NOT EXISTS clinics_listing_idx ON clinics (status, state, area);
 
@@ -158,3 +174,15 @@ CREATE TRIGGER kolo_tx_append_only BEFORE UPDATE OR DELETE ON kolo_transactions
 DROP TRIGGER IF EXISTS action_log_append_only ON action_log;
 CREATE TRIGGER action_log_append_only BEFORE UPDATE OR DELETE ON action_log
   FOR EACH ROW EXECUTE FUNCTION forbid_change();
+
+-- One-time codes for "Forgot PIN". Stored hashed, expire after 10 minutes, 5 tries, single use.
+CREATE TABLE IF NOT EXISTS pin_resets (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID NOT NULL REFERENCES users (id),
+  code_hash  TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  attempts   INTEGER NOT NULL DEFAULT 0,
+  used_at    TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS pin_resets_user_idx ON pin_resets (user_id, created_at DESC);

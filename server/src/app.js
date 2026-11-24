@@ -16,6 +16,8 @@ import staffRoutes from './routes/staff.js'
 import publicRoutes from './routes/public.js'
 
 const app = express()
+// Render (and most hosts) sit behind one proxy; needed so rate limits see the real visitor IP.
+if (process.env.NODE_ENV === 'production') app.set('trust proxy', 1)
 
 app.use(helmet())
 app.use(cors({ origin: process.env.CLIENT_URL || 'http://localhost:5173' }))

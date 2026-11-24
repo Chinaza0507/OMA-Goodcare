@@ -1,0 +1,159 @@
+import { defineSchema, defineTable } from 'convex/server'
+import { v } from 'convex/values'
+
+// ỌMA data. Money is whole naira. Dates are 'YYYY-MM-DD' and times 'HH:MM' in Nigerian
+// time (Africa/Lagos, UTC+1 all year). Instants (arrivedAt, calledAt…) are milliseconds.
+export const role = v.union(v.literal('patient'), v.literal('staff'), v.literal('manager'), v.literal('admin'))
+export const clinicType = v.union(v.literal('public'), v.literal('mission'), v.literal('private'), v.literal('school'))
+export const apptStatus = v.union(
+  v.literal('booked'), v.literal('checked_in'), v.literal('called'),
+  v.literal('seen'), v.literal('cancelled'), v.literal('no_show'),
+)
+export const depositStatus = v.union(
+  v.literal('none'), v.literal('held'), v.literal('deducted'), v.literal('returned'), v.literal('forfeited'),
+)
+
+export default defineSchema({
+  clinics: defineTable({
+    name: v.string(),
+    state: v.optional(v.string()),
+    area: v.optional(v.string()),
+    address: v.optional(v.string()),
+    landmark: v.optional(v.string()),
+    email: v.optional(v.string()),
+    latitude: v.optional(v.number()),
+    longitude: v.optional(v.number()),
+    // New hospitals stay hidden from patients until a ỌMA admin approves them.
+    status: v.union(v.literal('pending'), v.literal('approved')),
+    type: clinicType,
+    // paid: deposit is taken. covered: school clinic, no deposit, booking rule instead.
+    billingType: v.union(v.literal('paid'), v.literal('covered')),
+    paymentOption: v.union(v.literal('per_patient'), v.literal('monthly')),
+    graceMinutes: v.number(),
+    cancelWindowMinutes: v.number(),
+    depositNaira: v.number(),
+    active: v.boolean(),
+  }).index('by_status', ['status']),
+
+  departments: defineTable({
+    clinicId: v.id('clinics'),
+    name: v.string(),
+    consultationFee: v.union(v.number(), v.null()), // null = not provided
+    opensAt: v.string(),
+    closesAt: v.string(),
+    slotMinutes: v.number(),
+    avgVisitMinutes: v.number(),
+    active: v.boolean(),
+  }).index('by_clinic', ['clinicId']),
+
+  users: defineTable({
+    role,
+    name: v.string(),
+    phone: v.optional(v.string()), // patients: +234XXXXXXXXXX
+    email: v.optional(v.string()), // lower-case; hospital, staff and admin sign-in
+    secretHash: v.string(), // patients: 4-digit PIN; others: password
+    language: v.string(),
+    alertAhead: v.number(),
+    clinicId: v.optional(v.id('clinics')),
+    active: v.boolean(),
+    consentAt: v.optional(v.number()),
+    failedAttempts: v.number(),
+    lockedUntil: v.optional(v.number()),
+  })
+    .index('by_phone', ['phone'])
+    .index('by_email', ['email'])
+    .index('by_clinic', ['clinicId']),
+
+  // Sign-in sessions. Only a hash of the token is stored.
+  sessions: defineTable({
+    userId: v.id('users'),
+    tokenHash: v.string(),
+    expiresAt: v.number(),
+  }).index('by_token', ['tokenHash']).index('by_user', ['userId']),
+
+  familyMembers: defineTable({
+    ownerId: v.id('users'),
+    name: v.string(),
+    age: v.optional(v.number()),
+    isSelf: v.boolean(),
+  }).index('by_owner', ['ownerId']),
+
+  koloWallets: defineTable({
+    userId: v.id('users'),
+    available: v.number(),
+    reserved: v.number(),
+  }).index('by_user', ['userId']),
+
+  // Append-only: nothing in the code edits or deletes these rows.
+  koloTransactions: defineTable({
+    userId: v.id('users'),
+    type: v.union(v.literal('topup'), v.literal('hold'), v.literal('deduct'), v.literal('refund'), v.literal('forfeit')),
+    amount: v.number(),
+    appointmentId: v.optional(v.id('appointments')),
+    availableAfter: v.number(),
+    reservedAfter: v.number(),
+  }).index('by_user', ['userId']),
+
+  // A booking or a walk-in.
+  appointments: defineTable({
+    clinicId: v.id('clinics'),
+    departmentId: v.id('departments'),
+    familyMemberId: v.optional(v.id('familyMembers')),
+    bookedBy: v.optional(v.id('users')), // none for walk-ins without an account
+    patientName: v.string(),
+    patientPhone: v.optional(v.string()),
+    type: v.union(v.literal('booked'), v.literal('walk_in')),
+    date: v.string(),
+    time: v.string(),
+    queueNumber: v.number(),
+    status: apptStatus,
+    depositNaira: v.number(),
+    depositStatus,
+    frontRank: v.number(), // lower goes first; "move to front" lowers it
+    alertAhead: v.number(),
+    arrivedAt: v.optional(v.number()),
+    calledAt: v.optional(v.number()),
+    finishedAt: v.optional(v.number()),
+    cancelledAt: v.optional(v.number()),
+    cancelledBy: v.optional(v.union(v.literal('patient'), v.literal('clinic'))),
+  })
+    .index('by_dept_date', ['departmentId', 'date'])
+    .index('by_clinic_date', ['clinicId', 'date'])
+    .index('by_booked_by', ['bookedBy'])
+    .index('by_member', ['familyMemberId']),
+
+  // School clinics: first no-show warns, second blocks booking for 7 days.
+  noshowTracking: defineTable({
+    userId: v.id('users'),
+    clinicId: v.id('clinics'),
+    missCount: v.number(),
+    blockedUntil: v.optional(v.number()),
+  }).index('by_user_clinic', ['userId', 'clinicId']).index('by_clinic', ['clinicId']),
+
+  // Append-only action log.
+  actionLog: defineTable({
+    clinicId: v.id('clinics'),
+    actorId: v.optional(v.id('users')),
+    actorName: v.string(),
+    action: v.string(),
+    appointmentId: v.optional(v.id('appointments')),
+    patientName: v.optional(v.string()),
+    reason: v.optional(v.string()),
+    details: v.optional(v.any()),
+  }).index('by_clinic', ['clinicId']),
+
+  // "Forgot PIN" codes: stored hashed, 10 minutes, 5 tries, single use.
+  pinResets: defineTable({
+    userId: v.id('users'),
+    codeHash: v.string(),
+    expiresAt: v.number(),
+    attempts: v.number(),
+    usedAt: v.optional(v.number()),
+  }).index('by_user', ['userId']),
+
+  // Bumped whenever a queue changes, so live screens know to refresh.
+  queueVersions: defineTable({
+    key: v.string(), // 'clinic:<id>' or 'dept:<id>'
+    version: v.number(),
+  }).index('by_key', ['key']),
+})

@@ -18,15 +18,15 @@ if (!process.env.PIN_PEPPER) {
 const randomPassword = () => crypto.randomBytes(9).toString('base64url')
 const created = []
 
-async function addUser({ role, name, phone, clinicId = null }) {
-  const { rows: existing } = await pool.query('SELECT 1 FROM users WHERE phone = $1', [phone])
+async function addUser({ role, name, email, clinicId = null }) {
+  const { rows: existing } = await pool.query('SELECT 1 FROM users WHERE lower(email) = $1', [email])
   if (existing.length) return
   const password = randomPassword()
   await pool.query(
-    `INSERT INTO users (role, name, phone, secret_hash, clinic_id, consent_at) VALUES ($1, $2, $3, $4, $5, now())`,
-    [role, name, phone, await hashSecret(password), clinicId],
+    `INSERT INTO users (role, name, email, secret_hash, clinic_id, consent_at) VALUES ($1, $2, $3, $4, $5, now())`,
+    [role, name, email, await hashSecret(password), clinicId],
   )
-  created.push({ role, name, phone, password })
+  created.push({ role, name, email, password })
 }
 
 async function addClinic(c, departments) {
@@ -56,10 +56,11 @@ const schoolId = await addClinic(
   [{ name: 'GOPD', fee: null }],
 )
 
-await addUser({ role: 'manager', name: 'Demo Hospital Manager', phone: '+2348010000001', clinicId: demoId })
-await addUser({ role: 'staff', name: 'Nurse Joy', phone: '+2348010000002', clinicId: demoId })
-await addUser({ role: 'manager', name: 'Demo School Manager', phone: '+2348010000003', clinicId: schoolId })
-await addUser({ role: 'admin', name: 'Oma Admin', phone: '+2348010000009' })
+// example.com addresses are reserved for testing and never receive mail.
+await addUser({ role: 'manager', name: 'Demo General Hospital', email: 'frontdesk@demo-general.example.com', clinicId: demoId })
+await addUser({ role: 'staff', name: 'Nurse Joy', email: 'joy@demo-general.example.com', clinicId: demoId })
+await addUser({ role: 'manager', name: 'Demo School Clinic', email: 'clinic@demo-school.example.com', clinicId: schoolId })
+await addUser({ role: 'admin', name: 'Oma Admin', email: 'admin@oma.example.com' })
 
 if (created.length) {
   console.log('\nSample accounts created. Passwords are shown only now - save them somewhere safe:\n')

@@ -3,13 +3,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { defineConfig } from 'vite'
 
 // https://vite.dev/config/
+// The backend is Convex: the website talks to it directly (VITE_CONVEX_URL in .env.local).
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  server: {
-    // Forward API and websocket calls to the Express server in development
-    proxy: {
-      '/api': 'http://localhost:5001',
-      '/socket.io': { target: 'http://localhost:5001', ws: true },
-    },
-  },
 })

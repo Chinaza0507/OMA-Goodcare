@@ -6,7 +6,7 @@ import { signToken } from '../middleware/auth.js'
 import { AppError } from '../lib/errors.js'
 import { hashSecret } from '../lib/secret.js'
 import { logAction } from '../lib/log.js'
-import { phoneField, publicUser, LANGUAGES } from './auth.js'
+import { emailField, publicUser, LANGUAGES } from './auth.js'
 
 const router = Router()
 
@@ -28,15 +28,16 @@ const registerSchema = z.object({
   state: z.string().trim().min(2).max(60),
   area: z.string().trim().min(2).max(60),
   address: z.string().trim().min(3).max(200),
+  landmark: z.string().trim().max(200).optional(),
   latitude: z.number().min(-90).max(90).optional(),
   longitude: z.number().min(-180).max(180).optional(),
-  managerName: z.string().trim().min(2).max(100),
-  managerPhone: phoneField,
+  email: emailField, // the hospital's official email: its sign-in for the front desk
   password: z.string().min(8).max(72),
   language: z.enum(LANGUAGES).default('en'),
 })
 
-// "Sign in as hospital": creates the clinic (pending approval) and its manager account.
+// Register a hospital: creates the clinic (pending until an Oma admin approves it) and the
+// hospital's own sign-in (official email + password), shared by whoever is at the front desk.
 router.post('/register', signupLimiter, async (req, res) => {
   const d = registerSchema.parse(req.body)
   if ((d.latitude == null) !== (d.longitude == null)) throw new AppError(400, 'invalid_input')
@@ -45,14 +46,14 @@ router.post('/register', signupLimiter, async (req, res) => {
   try {
     const { clinic, manager } = await withTx(async (db) => {
       const { rows: c } = await db.query(
-        `INSERT INTO clinics (name, type, billing_type, state, area, address, latitude, longitude, status)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending') RETURNING *`,
-        [d.hospitalName, d.type, billingTypeFor(d.type), d.state, d.area, d.address, d.latitude ?? null, d.longitude ?? null],
+        `INSERT INTO clinics (name, type, billing_type, state, area, address, landmark, email, latitude, longitude, status)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending') RETURNING *`,
+        [d.hospitalName, d.type, billingTypeFor(d.type), d.state, d.area, d.address, d.landmark || null, d.email, d.latitude ?? null, d.longitude ?? null],
       )
       const { rows: u } = await db.query(
-        `INSERT INTO users (role, name, phone, secret_hash, language, clinic_id, consent_at)
+        `INSERT INTO users (role, name, email, secret_hash, language, clinic_id, consent_at)
          VALUES ('manager', $1, $2, $3, $4, $5, now()) RETURNING *`,
-        [d.managerName, d.managerPhone, hash, d.language, c[0].id],
+        [d.hospitalName, d.email, hash, d.language, c[0].id],
       )
       await logAction(db, {
         clinicId: c[0].id,
@@ -68,7 +69,7 @@ router.post('/register', signupLimiter, async (req, res) => {
       clinic: { id: clinic.id, name: clinic.name, type: clinic.type, status: clinic.status },
     })
   } catch (err) {
-    if (err.code === '23505') throw new AppError(409, 'phone_taken')
+    if (err.code === '23505') throw new AppError(409, 'email_taken')
     throw err
   }
 })

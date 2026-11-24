@@ -1,1 +1,87 @@
 @import "tailwindcss";
+
+@theme {
+  --color-plum: #5a2db0;
+  --color-plum-dark: #3f1f80;
+  --color-plum-soft: #d6c6ff;
+  --color-rose: #8c1d52;
+  --color-blush: #fcebf2;
+  --color-cream: #f8faf1;
+  --color-ink: #22121c;
+  --color-muted: #5e4856;
+  --color-line: #ebd6e1;
+  /* Softer and deeper shades, also swapped by the colour themes */
+  --color-plum-tint: #f3eefb;
+  --color-plum-faint: #fbf9fd;
+  --color-plum-deep: #2a1458;
+  --color-rose-dark: #6f1641;
+  --color-rose-tint: #f6d9e7;
+  --color-rose-line: #f0c3d6;
+  --color-danger: #b3261e;
+  --font-sans: Inter, system-ui, sans-serif;
+  --font-display: "Plus Jakarta Sans", Inter, sans-serif;
+  --font-hand: Caveat, "Comic Sans MS", cursive;
+}
+
+body {
+  margin: 0;
+  background: var(--color-cream);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+h1, h2, h3 { font-family: var(--font-display); }
+a:focus-visible, button:focus-visible { outline: 3px solid var(--color-plum); outline-offset: 2px; }
+input:focus:not(.no-ring) { outline: 3px solid var(--color-plum-soft); outline-offset: 1px; }
+
+/* Landing animations from the design */
+@keyframes omaRise { from { opacity: 0; transform: translateY(18px); } to { opacity: 1; transform: none; } }
+@keyframes omaDraw { from { stroke-dashoffset: 80; } to { stroke-dashoffset: 0; } }
+@keyframes omaPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.14); } }
+@keyframes omaWrite { to { stroke-dashoffset: 0; } }
+@keyframes omaFill { to { fill-opacity: 1; stroke-width: 0; } }
+@keyframes omaCoin { 0% { transform: translateY(-8px); opacity: 0; } 20% { opacity: 1; } 70% { transform: translateY(17px); opacity: 1; } 85%, 100% { transform: translateY(20px); opacity: 0; } }
+@keyframes omaWord { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.oma-symbol { animation: omaRise .8s ease-out both; }
+.oma-write { fill: currentColor; fill-opacity: 0; stroke: currentColor; stroke-width: 1.1; stroke-dasharray: 900; stroke-dashoffset: 900; animation: omaWrite 2s .5s ease-in-out forwards, omaFill .9s 2.1s ease-out forwards; }
+.oma-tag { animation: omaRise .7s 2.4s ease-out both; }
+.oma-line { stroke-dasharray: 80; animation: omaDraw .9s 2.8s ease-out both; }
+.oma-heart { transform-box: fill-box; transform-origin: center; animation: omaPulse 2.4s 1.8s ease-in-out infinite; }
+.oma-coin { animation: omaCoin 2.1s ease-in infinite; }
+.oma-word { animation: omaWord .5s ease-out both; }
+@keyframes omaFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+.oma-float { animation: omaFloat 6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .oma-symbol, .oma-tag, .oma-line, .oma-heart, .oma-coin, .oma-word, .oma-float { animation: none; }
+  .oma-write { animation: none; fill-opacity: 1; stroke-width: 0; stroke-dashoffset: 0; }
+}
+
+/* Hospital register/log-in card: tighten on shorter laptop screens so the page never scrolls. */
+@media (min-width: 1024px) and (max-height: 820px) {
+  .hospital-form { gap: 0.55rem; }
+  .hospital-form h2 { font-size: 22px; }
+  .hospital-form input, .hospital-form button { min-height: 42px; }
+  .hospital-form .hospital-sub { display: none; }
+  .hospital-form .hospital-sub[class*='text-rose'] { display: block; }
+}
+@media (min-width: 1024px) and (max-height: 700px) {
+  .hospital-form label, .hospital-form legend { font-size: 13px; }
+  .hospital-form input, .hospital-form button { min-height: 38px; }
+  .hospital-form { gap: 0.45rem; }
+}
+
+/* Colour themes (Settings). Each one swaps the shared colour set used across the app. */
+:root[data-theme="rose"] {
+  --color-plum: #8c1d52; --color-plum-dark: #6f1641; --color-plum-soft: #f6d0e1;
+  --color-rose: #5a2db0; --color-blush: #efe8fc; --color-line: #ead7e1;
+  --color-plum-tint: #fbeaf2; --color-plum-faint: #fdf6f9; --color-plum-deep: #4a0f2b; --color-rose-dark: #46208c; --color-rose-tint: #e6dbff; --color-rose-line: #d6c6ff;
+}
+:root[data-theme="olive"] {
+  --color-plum: #56682c; --color-plum-dark: #3f4f1e; --color-plum-soft: #dce6c2;
+  --color-rose: #8c1d52; --color-blush: #fcebf2; --color-cream: #f7f9ef; --color-line: #e1e6d3;
+  --color-plum-tint: #eef3e1; --color-plum-faint: #f8faf2; --color-plum-deep: #2c3713; --color-rose-dark: #6f1641; --color-rose-tint: #f6d9e7; --color-rose-line: #f0c3d6;
+}
+:root[data-theme="ocean"] {
+  --color-plum: #0f6e7a; --color-plum-dark: #0b525b; --color-plum-soft: #c4e8ec;
+  --color-rose: #c8475a; --color-blush: #fde9ec; --color-cream: #f4f9f9; --color-line: #d6e6e8;
+  --color-plum-tint: #e3f3f5; --color-plum-faint: #f3fafb; --color-plum-deep: #08393f; --color-rose-dark: #a2384a; --color-rose-tint: #fbe0e5; --color-rose-line: #f2bfc8;
+}
