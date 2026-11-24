@@ -45,6 +45,7 @@ export default function VisitSheet({ a, t, onClose, onChanged }) {
 
   const rows = [
     [t('visit.for'), a.patientName],
+    [t('visit.service'), `${a.serviceName} · ${a.minutes} min`],
     [t('visit.where'), `${a.departmentName}, ${a.clinicName}`],
     [t('visit.when'), longDay(a.date)],
     [t('visit.arrive'), clock(a.time)],

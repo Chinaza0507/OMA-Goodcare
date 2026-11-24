@@ -4,15 +4,16 @@ import { v } from 'convex/values'
 import { mutation, query, type QueryCtx } from './_generated/server'
 import type { Doc, Id } from './_generated/dataModel'
 import {
-  cleanEmail, createSession, fail, generateSlots, hashSecret, int, logAction, nowMinutesLagos,
-  publicUser, queueChanged, requirePatient, slotInstant, text, todayLagos, toMinutes, HHMM,
+  cleanEmail, createSession, fail, hashSecret, int, logAction, publicUser, queueChanged, requirePatient,
+  slotInstant, text, todayLagos, HHMM,
 } from './lib/core'
 import {
-  bookAppointment, cancelAppointment, getBalances, isActive, queueInfo, takenTimes, topUp, dayAppointments,
+  bookAppointment, bookingDates, cancelAppointment, dayAppointments, freeTimes, getBalances, isActive,
+  loadBookableService, queueInfo, topUp, MAX_DAYS_AHEAD,
 } from './lib/rules'
+import { CLINIC_TYPES } from './schema'
 
 const tokenArg = { token: v.optional(v.string()) }
-const CLINIC_TYPES = ['public', 'mission', 'private', 'school'] as const
 export const billingTypeFor = (type: string) => (type === 'school' ? 'covered' : 'paid') as 'covered' | 'paid'
 
 // ---------- hospital registration ----------
@@ -165,16 +166,28 @@ const distanceKm = (lat1: number, lng1: number, lat2: number, lng2: number) => {
   const x = Math.sin(rad(lat2 - lat1) / 2) ** 2 + Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(rad(lng2 - lng1) / 2) ** 2
   return 6371 * 2 * Math.asin(Math.sqrt(x))
 }
-const deptJson = (d: Doc<'departments'>) => ({
-  id: d._id, name: d.name, consultationFee: d.consultationFee, opensAt: d.opensAt, closesAt: d.closesAt, slotMinutes: d.slotMinutes,
-})
+// Departments a patient can book: active, with at least one active service and booking days.
+async function bookableDepartments(ctx: QueryCtx, clinicId: Id<'clinics'>) {
+  const depts = (await ctx.db.query('departments').withIndex('by_clinic', (q) => q.eq('clinicId', clinicId)).collect())
+    .filter((d) => d.active && d.bookingDays.length > 0).sort((x, y) => x.name.localeCompare(y.name))
+  const out = []
+  for (const d of depts) {
+    const services = (await ctx.db.query('services').withIndex('by_department', (q) => q.eq('departmentId', d._id)).collect())
+      .filter((sv) => sv.active).sort((x, y) => x.name.localeCompare(y.name))
+    if (!services.length) continue
+    out.push({
+      id: d._id, name: d.name, bookingDays: d.bookingDays, opensAt: d.opensAt, closesAt: d.closesAt,
+      nextDates: bookingDates(d),
+      services: services.map((sv) => ({ id: sv._id, name: sv.name, minutes: sv.minutes, price: sv.price })),
+    })
+  }
+  return out
+}
 async function clinicJson(ctx: QueryCtx, c: Doc<'clinics'>) {
-  const depts = (await ctx.db.query('departments').withIndex('by_clinic', (q) => q.eq('clinicId', c._id)).collect())
-    .filter((d) => d.active).sort((a, b) => a.name.localeCompare(b.name))
   return {
     id: c._id, name: c.name, type: c.type, state: c.state ?? null, area: c.area ?? null, address: c.address ?? null,
     landmark: c.landmark ?? null, billingType: c.billingType, depositNaira: c.billingType === 'paid' ? c.depositNaira : 0,
-    cancelWindowMinutes: c.cancelWindowMinutes, departments: depts.map(deptJson),
+    cancelWindowMinutes: c.cancelWindowMinutes, departments: await bookableDepartments(ctx, c._id),
   }
 }
 const approved = async (ctx: QueryCtx) =>
@@ -196,7 +209,7 @@ export const clinics = query({
         distanceKm: near && c.latitude != null && c.longitude != null ? Math.round(distanceKm(f.lat!, f.lng!, c.latitude, c.longitude) * 10) / 10 : null,
       })
     }
-    if (f.maxFee != null) result = result.filter((c) => c.departments.some((d) => d.consultationFee == null || d.consultationFee <= f.maxFee!))
+    if (f.maxFee != null) result = result.filter((c) => c.departments.some((d) => d.services.some((sv) => sv.price == null || sv.price <= f.maxFee!)))
     if (near) result.sort((a, b) => (a.distanceKm ?? Infinity) - (b.distanceKm ?? Infinity))
     return { clinics: result }
   },
@@ -222,23 +235,17 @@ export const clinic = query({
   },
 })
 
-// Free and taken times for a department today (same-day booking only).
-export const slots = query({
-  args: { departmentId: v.string(), date: v.optional(v.string()) },
+// Free start times for a service on each booking day in the next MAX_DAYS_AHEAD days.
+export const availability = query({
+  args: { serviceId: v.string() },
   handler: async (ctx, a) => {
-    const today = todayLagos()
-    const date = a.date ?? today
-    if (date !== today) fail('invalid_date')
-    const id = ctx.db.normalizeId('departments', a.departmentId)
-    const dept = id && (await ctx.db.get(id))
-    const clinic = dept && (await ctx.db.get(dept.clinicId))
-    if (!dept || !dept.active || !clinic || !clinic.active || clinic.status !== 'approved') return fail('not_found')
-    const taken = takenTimes(await dayAppointments(ctx, dept._id, date))
-    const now = nowMinutesLagos()
-    return {
-      date, slotMinutes: dept.slotMinutes,
-      slots: generateSlots(dept.opensAt, dept.closesAt, dept.slotMinutes).map((time) => ({ time, available: !taken.has(time) && toMinutes(time) >= now })),
+    const id = ctx.db.normalizeId('services', a.serviceId) ?? fail('not_found')
+    const { service, dept } = await loadBookableService(ctx, id)
+    const days = []
+    for (const date of bookingDates(dept)) {
+      days.push({ date, times: freeTimes(dept, service.minutes, date, await dayAppointments(ctx, dept._id, date)) })
     }
+    return { minutes: service.minutes, maxDaysAhead: MAX_DAYS_AHEAD, opensAt: dept.opensAt, closesAt: dept.closesAt, days }
   },
 })
 
@@ -248,25 +255,26 @@ async function visitJson(ctx: QueryCtx, a: Doc<'appointments'>) {
   const c = (await ctx.db.get(a.clinicId))!
   return {
     id: a._id, clinicId: a.clinicId, clinicName: c.name, departmentId: a.departmentId, departmentName: d.name,
-    patientName: a.patientName, familyMemberId: a.familyMemberId ?? null, type: a.type, date: a.date,
-    time: a.time, // an arrival time, not a guaranteed consultation time
+    serviceName: a.serviceName, minutes: a.minutes,
+    patientName: a.patientName, familyMemberId: a.familyMemberId ?? null, date: a.date,
+    time: a.time, // booked start; the live estimate below moves if the doctor runs late
     queueNumber: a.queueNumber, status: a.status,
     deposit: { amount: a.depositNaira, status: a.depositStatus }, alertAhead: a.alertAhead,
     canCancel: a.status === 'booked',
     cancelRefundsDeposit: slotInstant(a.date, a.time) - Date.now() >= c.cancelWindowMinutes * 60_000,
-    queue: await queueInfo(ctx, a, d.avgVisitMinutes),
+    queue: await queueInfo(ctx, a),
   }
 }
 
 export const book = mutation({
-  args: { ...tokenArg, familyMemberId: v.string(), departmentId: v.string(), date: v.string(), time: v.string(), alertAhead: v.optional(v.number()) },
+  args: { ...tokenArg, familyMemberId: v.string(), serviceId: v.string(), date: v.string(), time: v.string(), alertAhead: v.optional(v.number()) },
   handler: async (ctx, a) => {
     const user = await requirePatient(ctx, a.token)
     const familyMemberId = ctx.db.normalizeId('familyMembers', a.familyMemberId) ?? fail('not_found')
-    const departmentId = ctx.db.normalizeId('departments', a.departmentId) ?? fail('not_found')
+    const serviceId = ctx.db.normalizeId('services', a.serviceId) ?? fail('not_found')
     if (!/^\d{4}-\d{2}-\d{2}$/.test(a.date) || !HHMM.test(a.time)) fail('invalid_input')
     const { appt } = await bookAppointment(ctx, {
-      user, familyMemberId, departmentId, date: a.date, time: a.time,
+      user, familyMemberId, serviceId, date: a.date, time: a.time,
       alertAhead: a.alertAhead == null ? undefined : int(a.alertAhead, 1, 10, 'alertAhead'),
     })
     await queueChanged(ctx, appt.clinicId, appt.departmentId)

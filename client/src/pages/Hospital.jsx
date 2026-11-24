@@ -11,7 +11,7 @@ import en from '../i18n/en.js'
 // Hospital pages are always English for now; hospitals change language in settings after logging in.
 const tEn = (path) => path.split('.').reduce((o, k) => (o == null ? o : o[k]), en) ?? path
 
-const TYPES = ['public', 'mission', 'private', 'school']
+const TYPES = ['private', 'public', 'mission', 'dental', 'eye', 'specialist', 'school']
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 
 function Progress({ step, t }) {
@@ -191,17 +191,12 @@ export default function Hospital({ mode = 'register' }) {
         <Field id="h-name" label={t('hospital.hospitalName')}>
           <TextInput id="h-name" autoComplete="organization" value={f.hospitalName} onChange={(e) => set('hospitalName')(e.target.value)} placeholder={t('hospital.hospitalNamePh')} ok={ok.name} />
         </Field>
-        <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
-          <legend className="mb-2 text-sm font-semibold">{t('hospital.type')}</legend>
-          <div className="grid grid-cols-2 gap-2.5">
-            {TYPES.map((ty) => (
-              <button key={ty} type="button" aria-pressed={f.type === ty} onClick={() => set('type')(ty)}
-                className={`min-h-12 cursor-pointer rounded-[14px] border-[1.5px] text-[15px] font-semibold ${f.type === ty ? 'border-plum bg-[#efe8fc] text-plum' : 'border-line bg-white text-ink hover:border-plum-soft'}`}>
-                {t(`hospital.types.${ty}`)}
-              </button>
-            ))}
-          </div>
-        </fieldset>
+        <Field id="h-type" label={t('hospital.type')}>
+          <select id="h-type" value={f.type} onChange={(e) => set('type')(e.target.value)}
+            className="min-h-[52px] w-full cursor-pointer rounded-[14px] border-[1.5px] border-plum bg-white px-3.5 text-base text-ink">
+            {TYPES.map((ty) => <option key={ty} value={ty}>{t(`hospital.types.${ty}`)}</option>)}
+          </select>
+        </Field>
         <div className="grid grid-cols-2 gap-2.5">
           <Field id="h-state" label={t('hospital.state')}><TextInput id="h-state" value={f.state} onChange={(e) => set('state')(e.target.value)} placeholder={t('hospital.statePh')} ok={ok.state} /></Field>
           <Field id="h-area" label={t('hospital.area')}><TextInput id="h-area" value={f.area} onChange={(e) => set('area')(e.target.value)} placeholder={t('hospital.areaPh')} ok={ok.area} /></Field>

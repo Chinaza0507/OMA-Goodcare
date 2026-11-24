@@ -4,7 +4,11 @@ import { v } from 'convex/values'
 // ỌMA data. Money is whole naira. Dates are 'YYYY-MM-DD' and times 'HH:MM' in Nigerian
 // time (Africa/Lagos, UTC+1 all year). Instants (arrivedAt, calledAt…) are milliseconds.
 export const role = v.union(v.literal('patient'), v.literal('staff'), v.literal('manager'), v.literal('admin'))
-export const clinicType = v.union(v.literal('public'), v.literal('mission'), v.literal('private'), v.literal('school'))
+export const CLINIC_TYPES = ['public', 'mission', 'private', 'school', 'dental', 'eye', 'specialist'] as const
+export const clinicType = v.union(
+  v.literal('public'), v.literal('mission'), v.literal('private'), v.literal('school'),
+  v.literal('dental'), v.literal('eye'), v.literal('specialist'),
+)
 export const apptStatus = v.union(
   v.literal('booked'), v.literal('checked_in'), v.literal('called'),
   v.literal('seen'), v.literal('cancelled'), v.literal('no_show'),
@@ -35,16 +39,40 @@ export default defineSchema({
     active: v.boolean(),
   }).index('by_status', ['status']),
 
+  // A department has ONE booking line: on its booking days and hours, one doctor sees the
+  // online bookings in order. Walk-ins are seen separately and only logged (walkIns table).
   departments: defineTable({
     clinicId: v.id('clinics'),
     name: v.string(),
-    consultationFee: v.union(v.number(), v.null()), // null = not provided
-    opensAt: v.string(),
+    bookingDays: v.array(v.number()), // 0 = Sunday … 6 = Saturday
+    opensAt: v.string(), // booking hours, 'HH:MM'
     closesAt: v.string(),
-    slotMinutes: v.number(),
-    avgVisitMinutes: v.number(),
     active: v.boolean(),
   }).index('by_clinic', ['clinicId']),
+
+  // What a patient can book in a department, how long it takes and (optionally) what it costs.
+  services: defineTable({
+    clinicId: v.id('clinics'),
+    departmentId: v.id('departments'),
+    name: v.string(),
+    minutes: v.number(),
+    price: v.union(v.number(), v.null()), // null = price at hospital
+    active: v.boolean(),
+  }).index('by_department', ['departmentId']).index('by_clinic', ['clinicId']),
+
+  // Walk-ins: logged by the front desk so the day's numbers are complete. They are seen by
+  // another doctor and never enter the online booking line.
+  walkIns: defineTable({
+    clinicId: v.id('clinics'),
+    departmentId: v.id('departments'),
+    date: v.string(),
+    number: v.number(),
+    name: v.string(),
+    phone: v.optional(v.string()),
+    note: v.optional(v.string()),
+    status: v.union(v.literal('waiting'), v.literal('seen'), v.literal('left')),
+    finishedAt: v.optional(v.number()),
+  }).index('by_clinic_date', ['clinicId', 'date']).index('by_dept_date', ['departmentId', 'date']),
 
   users: defineTable({
     role,
@@ -94,17 +122,18 @@ export default defineSchema({
     reservedAfter: v.number(),
   }).index('by_user', ['userId']),
 
-  // A booking or a walk-in.
+  // An online booking. Its length comes from the service chosen.
   appointments: defineTable({
     clinicId: v.id('clinics'),
     departmentId: v.id('departments'),
+    serviceId: v.id('services'),
+    serviceName: v.string(),
+    minutes: v.number(),
     familyMemberId: v.optional(v.id('familyMembers')),
-    bookedBy: v.optional(v.id('users')), // none for walk-ins without an account
+    bookedBy: v.id('users'),
     patientName: v.string(),
-    patientPhone: v.optional(v.string()),
-    type: v.union(v.literal('booked'), v.literal('walk_in')),
     date: v.string(),
-    time: v.string(),
+    time: v.string(), // start of the booked slot, 'HH:MM'
     queueNumber: v.number(),
     status: apptStatus,
     depositNaira: v.number(),

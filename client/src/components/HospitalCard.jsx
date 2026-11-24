@@ -2,9 +2,9 @@ import { Link } from 'react-router-dom'
 
 const naira = (n) => `₦${Number(n || 0).toLocaleString('en-NG')}`
 
-// Cheapest department fee, or "Free" / "Fee at hospital".
+// Cheapest service price, or "Free" / "Fee at hospital".
 function priceLabel(c, t) {
-  const fees = c.departments.map((d) => d.consultationFee).filter((f) => f != null)
+  const fees = c.departments.flatMap((d) => d.services.map((s) => s.price)).filter((f) => f != null)
   if (!fees.length) return t('find.feeUnknown')
   const min = Math.min(...fees)
   return min === 0 ? t('find.free') : t('find.from').replace('{fee}', naira(min))

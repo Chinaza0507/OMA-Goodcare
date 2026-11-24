@@ -85,3 +85,9 @@ input:focus:not(.no-ring) { outline: 3px solid var(--color-plum-soft); outline-o
   --color-rose: #c8475a; --color-blush: #fde9ec; --color-cream: #f4f9f9; --color-line: #d6e6e8;
   --color-plum-tint: #e3f3f5; --color-plum-faint: #f3fafb; --color-plum-deep: #08393f; --color-rose-dark: #a2384a; --color-rose-tint: #fbe0e5; --color-rose-line: #f2bfc8;
 }
+
+/* Booking steps slide in gently. CSS (not JS) so a throttled tab can never leave a step half-faded. */
+@media (prefers-reduced-motion: no-preference) {
+  .step-in { animation: omaStep 0.35s ease-out both; }
+}
+@keyframes omaStep { from { opacity: 0; transform: translateX(14px); } to { opacity: 1; transform: none; } }

@@ -72,7 +72,7 @@ const ROUTES = [
     maxFee: num(q.get('maxFee')), lat: num(q.get('lat')), lng: num(q.get('lng')),
   }), false],
   ['GET', /^\/clinics\/locations$/, Q, fns.patient.locations, () => ({}), false],
-  ['GET', /^\/clinics\/departments\/([^/]+)\/slots$/, Q, fns.patient.slots, (m, __, q) => ({ departmentId: m[1], date: q.get('date') || undefined }), false],
+  ['GET', /^\/services\/([^/]+)\/availability$/, Q, fns.patient.availability, (m) => ({ serviceId: m[1] }), false],
   ['GET', /^\/clinics\/([^/]+)$/, Q, fns.patient.clinic, (m) => ({ id: m[1] }), false],
 
   ['POST', /^\/appointments$/, M, fns.patient.book, (_, b) => b],
@@ -93,14 +93,16 @@ const ROUTES = [
   ['POST', /^\/staff\/appointments\/([^/]+)\/move-to-front$/, M, fns.hospital.moveToFront, (m, b) => ({ id: m[1], reason: b.reason })],
   ['POST', /^\/staff\/appointments\/([^/]+)\/requeue$/, M, fns.hospital.requeue, (m) => ({ id: m[1] })],
   ['POST', /^\/staff\/departments\/([^/]+)\/call-next$/, M, fns.hospital.callNext, (m) => ({ departmentId: m[1] })],
-  ['PATCH', /^\/staff\/departments\/([^/]+)\/slot-length$/, M, fns.hospital.setSlotLength, (m, b) => ({ departmentId: m[1], slotMinutes: b.slotMinutes })],
-  ['POST', /^\/staff\/walk-ins$/, M, fns.hospital.walkIn, (_, b) => b],
+  ['POST', /^\/staff\/walk-ins$/, M, fns.hospital.addWalkIn, (_, b) => b],
+  ['PATCH', /^\/staff\/walk-ins\/([^/]+)$/, M, fns.hospital.setWalkInStatus, (m, b) => ({ id: m[1], status: b.status })],
   ['POST', /^\/staff\/cancel-day$/, M, fns.hospital.cancelDay, (_, b) => b ?? {}],
 
   ['GET', /^\/manager\/clinic$/, Q, fns.hospital.managerClinic, () => ({})],
   ['PATCH', /^\/manager\/clinic$/, M, fns.hospital.updateClinic, (_, b) => b],
   ['POST', /^\/manager\/departments$/, M, fns.hospital.addDepartment, (_, b) => b],
   ['PATCH', /^\/manager\/departments\/([^/]+)$/, M, fns.hospital.updateDepartment, (m, b) => ({ ...b, id: m[1] })],
+  ['POST', /^\/manager\/departments\/([^/]+)\/services$/, M, fns.hospital.addService, (m, b) => ({ ...b, departmentId: m[1] })],
+  ['PATCH', /^\/manager\/services\/([^/]+)$/, M, fns.hospital.updateService, (m, b) => ({ ...b, id: m[1] })],
   ['POST', /^\/manager\/staff$/, M, fns.hospital.addStaff, (_, b) => b],
   ['PATCH', /^\/manager\/staff\/([^/]+)$/, M, fns.hospital.setStaffActive, (m, b) => ({ id: m[1], active: b.active })],
 

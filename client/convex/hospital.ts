@@ -4,22 +4,25 @@ import { v } from 'convex/values'
 import { mutation, query, type MutationCtx, type QueryCtx } from './_generated/server'
 import type { Doc, Id } from './_generated/dataModel'
 import {
-  cleanEmail, dayStartMs, fail, firstName, generateSlots, hashSecret, int, logAction, normalizePhone,
-  nowMinutesLagos, queueChanged, requireRole, requireStaff, text, todayLagos, toMinutes, HHMM,
+  cleanEmail, dayStartMs, fail, firstName, hashSecret, int, logAction, normalizePhone,
+  queueChanged, requireRole, requireStaff, text, todayLagos, toMinutes, HHMM,
 } from './lib/core'
-import { frontOfQueueRank, nextQueueNumber, queueCompare, recordSchoolNoShow, settleDeposit, takenTimes, dayAppointments } from './lib/rules'
+import { addDays, frontOfQueueRank, queueCompare, recordSchoolNoShow, settleDeposit, dayAppointments, MAX_DAYS_AHEAD } from './lib/rules'
 import { billingTypeFor } from './patient'
+import { CLINIC_TYPES } from './schema'
 
 const tokenArg = { token: v.optional(v.string()) }
 const iso = (ms?: number) => (ms ? new Date(ms).toISOString() : null)
 
 const staffJson = (a: Doc<'appointments'>, deptName: string, graceMinutes: number) => ({
+  date: a.date,
   id: a._id,
   departmentId: a.departmentId,
   departmentName: deptName,
   queueNumber: a.queueNumber,
   firstName: firstName(a.patientName), // the list shows first names only
-  type: a.type,
+  serviceName: a.serviceName,
+  minutes: a.minutes,
   time: a.time,
   status: a.status,
   depositStatus: a.depositStatus,
@@ -41,7 +44,8 @@ export const staffClinic = query({
     const depts = (await clinicDepartments(ctx, c._id)).filter((d) => d.active).sort((a, b) => a.name.localeCompare(b.name))
     return {
       clinic: { id: c._id, name: c.name, type: c.type, billingType: c.billingType, status: c.status, graceMinutes: c.graceMinutes },
-      departments: depts.map((d) => ({ id: d._id, name: d.name, slotMinutes: d.slotMinutes, opensAt: d.opensAt, closesAt: d.closesAt })),
+      departments: depts.map((d) => ({ id: d._id, name: d.name, bookingDays: d.bookingDays, opensAt: d.opensAt, closesAt: d.closesAt })),
+      dates: Array.from({ length: MAX_DAYS_AHEAD + 1 }, (_, i) => addDays(todayLagos(), i)),
     }
   },
 })
@@ -57,7 +61,11 @@ export const staffToday = query({
     const rows = (await ctx.db.query('appointments').withIndex('by_clinic_date', (q) => q.eq('clinicId', c._id).eq('date', date)).collect())
       .filter((x) => !a.departmentId || x.departmentId === a.departmentId)
       .sort((x, y) => (names.get(x.departmentId) ?? '').localeCompare(names.get(y.departmentId) ?? '') || queueCompare(x, y))
-    return { date, appointments: rows.map((x) => staffJson(x, names.get(x.departmentId) ?? '', c.graceMinutes)) }
+    const walkIns = (await ctx.db.query('walkIns').withIndex('by_clinic_date', (q) => q.eq('clinicId', c._id).eq('date', date)).collect())
+      .filter((w) => !a.departmentId || w.departmentId === a.departmentId)
+      .sort((x, y) => x.number - y.number)
+      .map((w) => ({ id: w._id, departmentId: w.departmentId, number: w.number, name: w.name, note: w.note ?? null, status: w.status, addedAt: new Date(w._creationTime).toISOString() }))
+    return { date, appointments: rows.map((x) => staffJson(x, names.get(x.departmentId) ?? '', c.graceMinutes)), walkIns }
   },
 })
 
@@ -69,16 +77,18 @@ export const staffStats = query({
     const date = a.date ?? todayLagos()
     const depts = (await clinicDepartments(ctx, user.clinicId)).sort((x, y) => x.name.localeCompare(y.name))
     const all = await ctx.db.query('appointments').withIndex('by_clinic_date', (q) => q.eq('clinicId', user.clinicId).eq('date', date)).collect()
+    const walks = await ctx.db.query('walkIns').withIndex('by_clinic_date', (q) => q.eq('clinicId', user.clinicId).eq('date', date)).collect()
     const avg = (xs: number[]) => (xs.length ? Math.round((xs.reduce((s, n) => s + n, 0) / xs.length) * 10) / 10 : null)
-    const summary = (rows: Doc<'appointments'>[]) => {
-      const booked = rows.filter((r) => r.type === 'booked' && r.status !== 'cancelled').length
-      const bookedNoShows = rows.filter((r) => r.type === 'booked' && r.status === 'no_show').length
+    const summary = (rows: Doc<'appointments'>[], w: Doc<'walkIns'>[]) => {
+      const booked = rows.filter((r) => r.status !== 'cancelled').length
+      const bookedNoShows = rows.filter((r) => r.status === 'no_show').length
       return {
         patientsSeen: rows.filter((r) => r.status === 'seen').length,
         noShows: rows.filter((r) => r.status === 'no_show').length,
         cancelled: rows.filter((r) => r.status === 'cancelled').length,
         booked,
-        walkIns: rows.filter((r) => r.type === 'walk_in' && r.status !== 'cancelled').length,
+        walkIns: w.length,
+        walkInsSeen: w.filter((x) => x.status === 'seen').length,
         // Share of booked slots (not cancelled) that ended as a verified no-show.
         noShowRate: booked > 0 ? Math.round((bookedNoShows / booked) * 1000) / 10 : null,
         averageWaitMinutes: avg(rows.filter((r) => r.calledAt && r.arrivedAt).map((r) => (r.calledAt! - r.arrivedAt!) / 60_000)),
@@ -87,8 +97,8 @@ export const staffStats = query({
     }
     return {
       date,
-      totals: summary(all),
-      byDepartment: depts.map((d) => ({ departmentId: d._id, departmentName: d.name, ...summary(all.filter((x) => x.departmentId === d._id)) })),
+      totals: summary(all, walks),
+      byDepartment: depts.map((d) => ({ departmentId: d._id, departmentName: d.name, ...summary(all.filter((x) => x.departmentId === d._id), walks.filter((x) => x.departmentId === d._id)) })),
     }
   },
 })
@@ -152,6 +162,7 @@ export const checkIn = mutation({
   handler: async (ctx, a) => {
     const { user, appt } = await deskAppointment(ctx, a.token, a.id)
     needStatus(appt, 'booked')
+    if (appt.date !== todayLagos()) fail('not_today')
     await ctx.db.patch(appt._id, { status: 'checked_in', arrivedAt: Date.now() })
     await logAction(ctx, { clinicId: user.clinicId, actor: user, action: 'check_in', appt })
     await queueChanged(ctx, appt.clinicId, appt.departmentId)
@@ -165,6 +176,7 @@ export const call = mutation({
   handler: async (ctx, a) => {
     const { user, appt } = await deskAppointment(ctx, a.token, a.id)
     needStatus(appt, 'booked', 'checked_in')
+    if (appt.date !== todayLagos()) fail('not_today')
     await ctx.db.patch(appt._id, { status: 'called', calledAt: Date.now() })
     await logAction(ctx, { clinicId: user.clinicId, actor: user, action: 'call', appt })
     await queueChanged(ctx, appt.clinicId, appt.departmentId)
@@ -196,8 +208,8 @@ export const seen = mutation({
   handler: async (ctx, a) => {
     const { user, appt } = await deskAppointment(ctx, a.token, a.id)
     needStatus(appt, 'called')
-    const dept = (await ctx.db.get(appt.departmentId))!
-    const depositStatus = await settleDeposit(ctx, appt, dept.consultationFee === 0 ? 'returned' : 'deducted')
+    const service = await ctx.db.get(appt.serviceId)
+    const depositStatus = await settleDeposit(ctx, appt, service?.price === 0 ? 'returned' : 'deducted')
     await ctx.db.patch(appt._id, { status: 'seen', finishedAt: Date.now(), depositStatus })
     await logAction(ctx, { clinicId: user.clinicId, actor: user, action: 'seen', appt, details: { depositStatus } })
     await queueChanged(ctx, appt.clinicId, appt.departmentId)
@@ -253,10 +265,10 @@ export const requeue = mutation({
   },
 })
 
-// Walk-ins: name only. They take a free time in the same schedule as online bookings and get
-// the next queue number to match a numbered card.
-export const walkIn = mutation({
-  args: { ...tokenArg, departmentId: v.string(), name: v.string(), phone: v.optional(v.string()), time: v.optional(v.string()) },
+// Walk-in log: the front desk notes walk-ins so the day's numbers are complete. Another doctor
+// sees them; they never enter the online booking line or change a booked patient's place.
+export const addWalkIn = mutation({
+  args: { ...tokenArg, departmentId: v.string(), name: v.string(), phone: v.optional(v.string()), note: v.optional(v.string()) },
   handler: async (ctx, a) => {
     const user = await requireStaff(ctx, a.token)
     const name = text(a.name, 2, 100, 'name')
@@ -265,54 +277,41 @@ export const walkIn = mutation({
     const id = ctx.db.normalizeId('departments', a.departmentId)
     const dept = id && (await ctx.db.get(id))
     if (!dept || dept.clinicId !== user.clinicId || !dept.active) return fail('not_found')
-
     const date = todayLagos()
-    const now = nowMinutesLagos()
-    const all = await dayAppointments(ctx, dept._id, date)
-    const taken = takenTimes(all)
-    // A time is usable while its slot has not finished yet.
-    const open = generateSlots(dept.opensAt, dept.closesAt, dept.slotMinutes).filter((t) => toMinutes(t) + dept.slotMinutes > now)
-    let time = a.time
-    if (time) {
-      if (!HHMM.test(time) || !open.includes(time)) fail('invalid_slot')
-      if (taken.has(time)) fail('slot_taken')
-    } else {
-      time = open.find((t) => !taken.has(t))
-      if (!time) return fail('day_full') // no waiting list, nothing carries over
-    }
-
-    // A walk-in whose phone number has a ỌMA account can follow their place online.
-    let bookedBy: Id<'users'> | undefined
-    let familyMemberId: Id<'familyMembers'> | undefined
-    if (phone) {
-      const owner = await ctx.db.query('users').withIndex('by_phone', (q) => q.eq('phone', phone)).first()
-      if (owner?.role === 'patient') {
-        const self = (await ctx.db.query('familyMembers').withIndex('by_owner', (q) => q.eq('ownerId', owner._id)).collect()).find((m) => m.isSelf)
-        if (self && all.some((x) => x.status !== 'cancelled' && x.familyMemberId === self._id)) fail('already_booked')
-        bookedBy = owner._id
-        familyMemberId = self?._id
-      }
-    }
-    const apptId = await ctx.db.insert('appointments', {
-      clinicId: user.clinicId, departmentId: dept._id, familyMemberId, bookedBy, patientName: name,
-      patientPhone: phone ?? undefined, type: 'walk_in', date, time, queueNumber: await nextQueueNumber(ctx, dept._id, date),
-      status: 'checked_in', depositNaira: 0, depositStatus: 'none', frontRank: 0, alertAhead: 3, arrivedAt: Date.now(),
+    const today = await ctx.db.query('walkIns').withIndex('by_dept_date', (q) => q.eq('departmentId', dept._id).eq('date', date)).collect()
+    const number = today.reduce((m, w) => Math.max(m, w.number), 0) + 1
+    const wid = await ctx.db.insert('walkIns', {
+      clinicId: user.clinicId, departmentId: dept._id, date, number, name, phone: phone ?? undefined,
+      note: a.note?.trim().slice(0, 120) || undefined, status: 'waiting',
     })
-    const appt = (await ctx.db.get(apptId))!
-    await logAction(ctx, { clinicId: user.clinicId, actor: user, action: 'walk_in_registered', appt })
-    await queueChanged(ctx, appt.clinicId, appt.departmentId)
-    const clinic = (await ctx.db.get(user.clinicId))!
-    return { appointment: staffJson(appt, dept.name, clinic.graceMinutes) }
+    await logAction(ctx, { clinicId: user.clinicId, actor: user, action: 'walk_in_registered', details: { name, department: dept.name, number } })
+    await queueChanged(ctx, user.clinicId, dept._id)
+    return { walkIn: { id: wid, departmentId: dept._id, departmentName: dept.name, number, name, status: 'waiting' } }
+  },
+})
+
+export const setWalkInStatus = mutation({
+  args: { ...tokenArg, id: v.string(), status: v.union(v.literal('waiting'), v.literal('seen'), v.literal('left')) },
+  handler: async (ctx, a) => {
+    const user = await requireStaff(ctx, a.token)
+    const id = ctx.db.normalizeId('walkIns', a.id)
+    const w = id && (await ctx.db.get(id))
+    if (!w || w.clinicId !== user.clinicId) return fail('not_found')
+    await ctx.db.patch(w._id, { status: a.status, finishedAt: a.status === 'waiting' ? undefined : Date.now() })
+    await queueChanged(ctx, user.clinicId, w.departmentId)
+    return { status: a.status }
   },
 })
 
 // Doctor left early or the clinic closes: cancel the rest of today. Deposits go back to Kolo.
 export const cancelDay = mutation({
-  args: { ...tokenArg, departmentId: v.optional(v.string()), reason: v.optional(v.string()) },
+  args: { ...tokenArg, departmentId: v.optional(v.string()), reason: v.optional(v.string()), date: v.optional(v.string()) },
   handler: async (ctx, a) => {
     const user = await requireStaff(ctx, a.token)
     const reason = a.reason ? text(a.reason, 2, 200, 'reason') : 'Clinic closed'
-    const rows = (await ctx.db.query('appointments').withIndex('by_clinic_date', (q) => q.eq('clinicId', user.clinicId).eq('date', todayLagos())).collect())
+    const date = a.date ?? todayLagos()
+    if (date < todayLagos() || date > addDays(todayLagos(), MAX_DAYS_AHEAD)) fail('invalid_date')
+    const rows = (await ctx.db.query('appointments').withIndex('by_clinic_date', (q) => q.eq('clinicId', user.clinicId).eq('date', date)).collect())
       .filter((x) => ['booked', 'checked_in', 'called'].includes(x.status) && (!a.departmentId || x.departmentId === a.departmentId))
     const touched = new Set<Id<'departments'>>()
     for (const appt of rows) {
@@ -321,24 +320,9 @@ export const cancelDay = mutation({
       await logAction(ctx, { clinicId: user.clinicId, actor: user, action: 'cancelled_by_clinic', appt, reason })
       touched.add(appt.departmentId)
     }
-    await logAction(ctx, { clinicId: user.clinicId, actor: user, action: 'day_cancelled', reason, details: { count: rows.length } })
+    await logAction(ctx, { clinicId: user.clinicId, actor: user, action: 'day_cancelled', reason, details: { count: rows.length, date } })
     for (const d of touched) await queueChanged(ctx, user.clinicId, d)
     return { cancelled: rows.length }
-  },
-})
-
-// Staff may adjust a department's slot length at any time (the change is logged).
-export const setSlotLength = mutation({
-  args: { ...tokenArg, departmentId: v.string(), slotMinutes: v.number() },
-  handler: async (ctx, a) => {
-    const user = await requireStaff(ctx, a.token)
-    const slotMinutes = int(a.slotMinutes, 5, 120, 'slotMinutes')
-    const id = ctx.db.normalizeId('departments', a.departmentId)
-    const dept = id && (await ctx.db.get(id))
-    if (!dept || dept.clinicId !== user.clinicId) return fail('not_found')
-    await ctx.db.patch(dept._id, { slotMinutes })
-    await logAction(ctx, { clinicId: user.clinicId, actor: user, action: 'slot_length_changed', details: { departmentId: dept._id, slotMinutes } })
-    return { slotMinutes }
   },
 })
 
@@ -348,9 +332,10 @@ const requireManager = async (ctx: QueryCtx, token: string | undefined) => {
   if (user.role !== 'manager') fail('forbidden')
   return user
 }
-const departmentJson = (d: Doc<'departments'>) => ({
-  id: d._id, name: d.name, consultationFee: d.consultationFee, opensAt: d.opensAt, closesAt: d.closesAt,
-  slotMinutes: d.slotMinutes, avgVisitMinutes: d.avgVisitMinutes, active: d.active,
+const departmentJson = (d: Doc<'departments'>, services: Doc<'services'>[]) => ({
+  id: d._id, name: d.name, bookingDays: d.bookingDays, opensAt: d.opensAt, closesAt: d.closesAt, active: d.active,
+  services: services.filter((sv) => sv.departmentId === d._id).sort((x, y) => x.name.localeCompare(y.name))
+    .map((sv) => ({ id: sv._id, name: sv.name, minutes: sv.minutes, price: sv.price, active: sv.active })),
 })
 
 export const managerClinic = query({
@@ -359,6 +344,7 @@ export const managerClinic = query({
     const user = await requireManager(ctx, token)
     const c = (await ctx.db.get(user.clinicId))!
     const depts = (await clinicDepartments(ctx, c._id)).sort((a, b) => a.name.localeCompare(b.name))
+    const services = await ctx.db.query('services').withIndex('by_clinic', (q) => q.eq('clinicId', c._id)).collect()
     const staff = (await ctx.db.query('users').withIndex('by_clinic', (q) => q.eq('clinicId', c._id)).collect())
       .sort((a, b) => a.role.localeCompare(b.role) || a.name.localeCompare(b.name))
     return {
@@ -367,7 +353,7 @@ export const managerClinic = query({
         state: c.state ?? null, area: c.area ?? null, address: c.address ?? null, latitude: c.latitude ?? null, longitude: c.longitude ?? null,
         graceMinutes: c.graceMinutes, cancelWindowMinutes: c.cancelWindowMinutes, depositNaira: c.depositNaira,
       },
-      departments: depts.map(departmentJson),
+      departments: depts.map((d) => departmentJson(d, services)),
       staff: staff.map((s) => ({ id: s._id, name: s.name, email: s.email ?? null, role: s.role, active: s.active })),
     }
   },
@@ -401,38 +387,41 @@ export const updateClinic = mutation({
   },
 })
 
-function checkDept(d: { name?: string; consultationFee?: number | null; opensAt?: string; closesAt?: string; slotMinutes?: number; avgVisitMinutes?: number }) {
+function checkDept(d: { name?: string; bookingDays?: number[]; opensAt?: string; closesAt?: string }) {
   const out: Partial<Doc<'departments'>> = {}
   if (d.name !== undefined) out.name = text(d.name, 2, 80, 'name')
-  if (d.consultationFee !== undefined) out.consultationFee = d.consultationFee === null ? null : int(d.consultationFee, 0, 10_000_000, 'consultationFee')
+  if (d.bookingDays !== undefined) {
+    if (d.bookingDays.some((n) => !Number.isInteger(n) || n < 0 || n > 6)) fail('invalid_input', { field: 'bookingDays' })
+    out.bookingDays = [...new Set(d.bookingDays)].sort()
+  }
   if (d.opensAt !== undefined) { if (!HHMM.test(d.opensAt)) fail('invalid_input', { field: 'opensAt' }); out.opensAt = d.opensAt }
   if (d.closesAt !== undefined) { if (!HHMM.test(d.closesAt)) fail('invalid_input', { field: 'closesAt' }); out.closesAt = d.closesAt }
-  if (d.slotMinutes !== undefined) out.slotMinutes = int(d.slotMinutes, 5, 120, 'slotMinutes')
-  if (d.avgVisitMinutes !== undefined) out.avgVisitMinutes = int(d.avgVisitMinutes, 1, 240, 'avgVisitMinutes')
   return out
 }
-const deptFields = {
-  name: v.optional(v.string()), consultationFee: v.optional(v.union(v.number(), v.null())), opensAt: v.optional(v.string()),
-  closesAt: v.optional(v.string()), slotMinutes: v.optional(v.number()), avgVisitMinutes: v.optional(v.number()),
-}
+const deptFields = { name: v.optional(v.string()), bookingDays: v.optional(v.array(v.number())), opensAt: v.optional(v.string()), closesAt: v.optional(v.string()) }
 async function nameTaken(ctx: QueryCtx, clinicId: Id<'clinics'>, name: string, except?: Id<'departments'>) {
   return (await clinicDepartments(ctx, clinicId)).some((x) => x._id !== except && x.name.toLowerCase() === name.toLowerCase())
+}
+async function ownDepartment(ctx: QueryCtx, clinicId: Id<'clinics'>, raw: string) {
+  const id = ctx.db.normalizeId('departments', raw)
+  const dept = id && (await ctx.db.get(id))
+  if (!dept || dept.clinicId !== clinicId) return fail('not_found')
+  return dept
 }
 
 export const addDepartment = mutation({
   args: { ...tokenArg, ...deptFields },
   handler: async (ctx, a) => {
     const user = await requireManager(ctx, a.token)
-    const d = checkDept(a)
-    if (!d.name || !d.opensAt || !d.closesAt || d.slotMinutes == null || d.avgVisitMinutes == null || d.consultationFee === undefined) fail('invalid_input')
+    const d = checkDept({ bookingDays: [], opensAt: '09:00', closesAt: '16:00', ...a })
+    if (!d.name) fail('invalid_input', { field: 'name' })
     if (toMinutes(d.closesAt!) <= toMinutes(d.opensAt!)) fail('invalid_input', { field: 'closesAt' })
     if (await nameTaken(ctx, user.clinicId, d.name!)) fail('department_exists')
     const id = await ctx.db.insert('departments', {
-      clinicId: user.clinicId, name: d.name!, consultationFee: d.consultationFee!, opensAt: d.opensAt!, closesAt: d.closesAt!,
-      slotMinutes: d.slotMinutes!, avgVisitMinutes: d.avgVisitMinutes!, active: true,
+      clinicId: user.clinicId, name: d.name!, bookingDays: d.bookingDays!, opensAt: d.opensAt!, closesAt: d.closesAt!, active: true,
     })
     await logAction(ctx, { clinicId: user.clinicId, actor: user, action: 'department_created', details: { name: d.name } })
-    return { department: departmentJson((await ctx.db.get(id))!) }
+    return { department: departmentJson((await ctx.db.get(id))!, []) }
   },
 })
 
@@ -440,9 +429,7 @@ export const updateDepartment = mutation({
   args: { ...tokenArg, id: v.string(), ...deptFields, active: v.optional(v.boolean()) },
   handler: async (ctx, a) => {
     const user = await requireManager(ctx, a.token)
-    const id = ctx.db.normalizeId('departments', a.id)
-    const dept = id && (await ctx.db.get(id))
-    if (!dept || dept.clinicId !== user.clinicId) return fail('not_found')
+    const dept = await ownDepartment(ctx, user.clinicId, a.id)
     const patch = { ...checkDept(a), ...(a.active !== undefined ? { active: a.active } : {}) }
     if (toMinutes(patch.closesAt ?? dept.closesAt) <= toMinutes(patch.opensAt ?? dept.opensAt)) fail('invalid_input', { field: 'closesAt' })
     if (patch.name && (await nameTaken(ctx, user.clinicId, patch.name, dept._id))) fail('department_exists')
@@ -450,7 +437,46 @@ export const updateDepartment = mutation({
     const { token: _t, ...details } = a
     void _t
     await logAction(ctx, { clinicId: user.clinicId, actor: user, action: 'department_updated', details })
-    return { department: departmentJson((await ctx.db.get(dept._id))!) }
+    return { ok: true }
+  },
+})
+
+// Services a department offers, with how long each takes (sizes the booking) and an optional price.
+const serviceFields = { name: v.optional(v.string()), minutes: v.optional(v.number()), price: v.optional(v.union(v.number(), v.null())) }
+function checkService(sv: { name?: string; minutes?: number; price?: number | null }) {
+  const out: Partial<Doc<'services'>> = {}
+  if (sv.name !== undefined) out.name = text(sv.name, 2, 80, 'name')
+  if (sv.minutes !== undefined) out.minutes = int(sv.minutes, 5, 480, 'minutes')
+  if (sv.price !== undefined) out.price = sv.price === null ? null : int(sv.price, 0, 10_000_000, 'price')
+  return out
+}
+
+export const addService = mutation({
+  args: { ...tokenArg, departmentId: v.string(), ...serviceFields },
+  handler: async (ctx, a) => {
+    const user = await requireManager(ctx, a.token)
+    const dept = await ownDepartment(ctx, user.clinicId, a.departmentId)
+    const sv = checkService({ minutes: 30, price: null, ...a })
+    if (!sv.name) fail('invalid_input', { field: 'name' })
+    const existing = await ctx.db.query('services').withIndex('by_department', (q) => q.eq('departmentId', dept._id)).collect()
+    if (existing.some((x) => x.name.toLowerCase() === sv.name!.toLowerCase())) fail('service_exists')
+    await ctx.db.insert('services', { clinicId: user.clinicId, departmentId: dept._id, name: sv.name!, minutes: sv.minutes!, price: sv.price!, active: true })
+    await logAction(ctx, { clinicId: user.clinicId, actor: user, action: 'service_added', details: { department: dept.name, name: sv.name } })
+    return { ok: true }
+  },
+})
+
+export const updateService = mutation({
+  args: { ...tokenArg, id: v.string(), ...serviceFields, active: v.optional(v.boolean()) },
+  handler: async (ctx, a) => {
+    const user = await requireManager(ctx, a.token)
+    const id = ctx.db.normalizeId('services', a.id)
+    const sv = id && (await ctx.db.get(id))
+    if (!sv || sv.clinicId !== user.clinicId) return fail('not_found')
+    // Bookings already made keep the length they were booked with.
+    await ctx.db.patch(sv._id, { ...checkService(a), ...(a.active !== undefined ? { active: a.active } : {}) })
+    await logAction(ctx, { clinicId: user.clinicId, actor: user, action: 'service_updated', details: { name: a.name ?? sv.name } })
+    return { ok: true }
   },
 })
 
@@ -528,7 +554,7 @@ export const adminUpdateClinic = mutation({
     if (!c) return fail('not_found')
     const patch: Partial<Doc<'clinics'>> = {}
     if (a.type !== undefined) {
-      if (!['public', 'mission', 'private', 'school'].includes(a.type)) fail('invalid_input', { field: 'type' })
+      if (!(CLINIC_TYPES as readonly string[]).includes(a.type)) fail('invalid_input', { field: 'type' })
       patch.type = a.type as Doc<'clinics'>['type']
       patch.billingType = billingTypeFor(a.type)
     }

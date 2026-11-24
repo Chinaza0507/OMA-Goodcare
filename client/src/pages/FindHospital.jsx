@@ -58,7 +58,9 @@ export default function FindHospital() {
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase()
     if (!clinics || !needle) return clinics
-    return clinics.filter((c) => [c.name, c.area, c.state, c.address, c.landmark].some((v) => v?.toLowerCase().includes(needle)))
+    // Search by hospital, place, or what you need (e.g. "braces", "eye test").
+    return clinics.filter((c) => [c.name, c.area, c.state, c.address, c.landmark, ...c.departments.flatMap((d) => [d.name, ...d.services.map((s) => s.name)])]
+      .some((v) => v?.toLowerCase().includes(needle)))
   }, [clinics, q])
 
   useGSAP(() => {

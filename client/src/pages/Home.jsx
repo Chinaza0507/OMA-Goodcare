@@ -148,8 +148,8 @@ function Ticket({ a, serving, t, onDetails }) {
       </div>
 
       <div className="relative mt-4">
-        <div className="text-lg font-bold">{a.patientName} · {a.departmentName}</div>
-        <div className="mt-0.5 text-sm text-rose-tint">{a.clinicName}</div>
+        <div className="text-lg font-bold">{a.patientName} · {a.serviceName}</div>
+        <div className="mt-0.5 text-sm text-rose-tint">{a.departmentName}, {a.clinicName}</div>
       </div>
 
       {called ? (
@@ -177,6 +177,12 @@ function Ticket({ a, serving, t, onDetails }) {
       )}
 
       {!called && <QueueProgress a={a} serving={serving} t={t} />}
+
+      {!called && q.delayMinutes >= 10 && (
+        <div role="status" className="relative mt-4 rounded-2xl bg-white/[0.14] px-4 py-3 text-[15px]">
+          {fill(t('dash.runningLate'), { n: q.delayMinutes, time: clock(q.estimatedFrom) })}
+        </div>
+      )}
 
       {!called && (
         <div className="relative mt-6 grid gap-2.5 sm:grid-cols-2">
@@ -365,8 +371,8 @@ export default function Home() {
                           <span className="font-display text-lg font-extrabold leading-none">{a.date.slice(8)}</span>
                         </span>
                         <span className="min-w-0 flex-1">
-                          <b className="block truncate text-[15px]">{a.patientName} · {a.departmentName}</b>
-                          <span className="block truncate text-sm text-muted">{a.clinicName}</span>
+                          <b className="block truncate text-[15px]">{a.patientName} · {a.serviceName}</b>
+                          <span className="block truncate text-sm text-muted">{a.departmentName}, {a.clinicName}</span>
                         </span>
                         <span className="shrink-0 font-display text-[15px] font-bold">{clock(a.time)}</span>
                         </button>

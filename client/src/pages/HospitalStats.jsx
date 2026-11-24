@@ -11,10 +11,11 @@ const ACTION = {
   no_show: 'Marked as no-show',
   move_to_front: 'Moved to the front',
   late_arrival_requeued: 'Arrived late, back in queue',
-  walk_in_registered: 'Walk-in added',
+  walk_in_registered: 'Walk-in logged',
   cancelled_by_clinic: 'Visit cancelled by hospital',
   day_cancelled: 'Rest of day cancelled',
-  slot_length_changed: 'Slot length changed',
+  service_added: 'Service added',
+  service_updated: 'Service changed',
   department_created: 'Department added',
   department_updated: 'Department changed',
   staff_created: 'Staff account added',
@@ -69,9 +70,9 @@ export default function HospitalStats() {
         {stats && (
           <>
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-              <Tile label="Patients seen" value={tot?.patientsSeen ?? 0} tone="text-plum" />
+              <Tile label="Bookings seen" value={tot?.patientsSeen ?? 0} tone="text-plum" />
               <Tile label="Average wait" value={mins(tot?.averageWaitMinutes)} />
-              <Tile label="Walk-ins" value={tot?.walkIns ?? 0} />
+              <Tile label="Walk-ins logged" value={tot?.walkIns ?? 0} />
               <Tile label="No-shows" value={tot?.noShows ?? 0} tone="text-rose" />
             </div>
 

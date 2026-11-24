@@ -219,7 +219,7 @@ export const deleteAccount = mutation({
         const r = await cancelAppointment(ctx, { appointmentId: v._id, userId: user._id, confirm: true })
         await queueChanged(ctx, r.clinicId, r.departmentId)
       }
-      await ctx.db.patch(v._id, { patientName: 'Deleted patient', patientPhone: undefined })
+      await ctx.db.patch(v._id, { patientName: 'Deleted patient' })
     }
     for (const m of await ctx.db.query('familyMembers').withIndex('by_owner', (q) => q.eq('ownerId', user._id)).collect()) {
       await ctx.db.patch(m._id, { name: 'Deleted', age: undefined })

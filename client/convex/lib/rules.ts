@@ -3,9 +3,7 @@
 // always change together or not at all.
 import type { MutationCtx, QueryCtx } from '../_generated/server'
 import type { Doc, Id } from '../_generated/dataModel'
-import {
-  fail, generateSlots, nowMinutesLagos, slotInstant, toMinutes, todayLagos, fromMinutes,
-} from './core'
+import { fail, nowMinutesLagos, slotInstant, toMinutes, todayLagos, fromMinutes } from './core'
 
 // ---------- Kolo ----------
 type TxType = Doc<'koloTransactions'>['type']
@@ -36,7 +34,7 @@ export async function getBalances(ctx: QueryCtx, userId: Id<'users'>) {
 
 // Settle a held deposit. Used by every path that ends an appointment.
 export async function settleDeposit(ctx: MutationCtx, appt: Doc<'appointments'>, outcome: 'returned' | 'deducted' | 'forfeited') {
-  if (appt.depositStatus !== 'held' || !appt.bookedBy) return appt.depositStatus
+  if (appt.depositStatus !== 'held') return appt.depositStatus
   const amt = appt.depositNaira
   if (outcome === 'returned') await apply(ctx, appt.bookedBy, 'refund', amt, appt._id, amt, -amt)
   else if (outcome === 'deducted') await apply(ctx, appt.bookedBy, 'deduct', amt, appt._id, 0, -amt)
@@ -46,20 +44,15 @@ export async function settleDeposit(ctx: MutationCtx, appt: Doc<'appointments'>,
 
 // ---------- queue ----------
 export const ACTIVE = ['booked', 'checked_in', 'called'] as const
-export const isActive = (s: string) => (ACTIVE as readonly string[]).includes(s)
+export const isActive = (st: string) => (ACTIVE as readonly string[]).includes(st)
 
-// Queue order within a department and day: front-of-queue moves first, then the
-// slot time, then queue number. This is the ONE definition of "who is ahead".
+// Order of the booking line for a department and day: "move to front" first, then the booked
+// time, then queue number. This is the ONE definition of "who is ahead".
 export const queueCompare = (a: Doc<'appointments'>, b: Doc<'appointments'>) =>
   a.frontRank - b.frontRank || toMinutes(a.time) - toMinutes(b.time) || a.queueNumber - b.queueNumber
 
 export const dayAppointments = (ctx: QueryCtx, departmentId: Id<'departments'>, date: string) =>
   ctx.db.query('appointments').withIndex('by_dept_date', (q) => q.eq('departmentId', departmentId).eq('date', date)).collect()
-
-export async function nextQueueNumber(ctx: QueryCtx, departmentId: Id<'departments'>, date: string) {
-  const all = await dayAppointments(ctx, departmentId, date)
-  return all.reduce((m, a) => Math.max(m, a.queueNumber), 0) + 1
-}
 
 // Lowest rank in this department/day, minus one: puts someone at the very front.
 export async function frontOfQueueRank(ctx: QueryCtx, appt: Doc<'appointments'>) {
@@ -67,79 +60,116 @@ export async function frontOfQueueRank(ctx: QueryCtx, appt: Doc<'appointments'>)
   return all.reduce((m, a) => Math.min(m, a.frontRank), 0) - 1
 }
 
-// Average consultation length today: the last 10 patients seen, or the department's set
-// average until 10 have been seen.
-function averageVisit(all: Doc<'appointments'>[], fallback: number) {
-  const seen = all
-    .filter((a) => a.status === 'seen' && a.finishedAt && a.calledAt)
-    .sort((a, b) => b.finishedAt! - a.finishedAt!)
-    .slice(0, 10)
-  if (seen.length < 10) return fallback
-  const avg = seen.reduce((s, a) => s + (a.finishedAt! - a.calledAt!) / 60_000, 0) / seen.length
-  return avg > 0 ? avg : fallback
-}
-
-// Live position for one appointment: people ahead and the estimated wait.
-export async function queueInfo(ctx: QueryCtx, appt: Doc<'appointments'>, avgVisitMinutes: number) {
+// Live position for one booking, from the real length of every service ahead of it and how
+// far the doctor has actually got. If the doctor runs late, everyone's estimate moves.
+export async function queueInfo(ctx: QueryCtx, appt: Doc<'appointments'>) {
   if (!isActive(appt.status) || appt.date !== todayLagos()) return null
-  const all = await dayAppointments(ctx, appt.departmentId, appt.date)
-  const ahead = all.filter((o) => o._id !== appt._id && isActive(o.status) && queueCompare(o, appt) < 0).length
-  const avg = averageVisit(all, avgVisitMinutes)
-  const waitMinutes = Math.round(ahead * avg)
-  const start = Math.max(nowMinutesLagos() + waitMinutes, toMinutes(appt.time))
+  const now = nowMinutesLagos()
+  const nowMs = Date.now()
+  const line = (await dayAppointments(ctx, appt.departmentId, appt.date)).filter((a) => isActive(a.status)).sort(queueCompare)
+  const ahead = line.findIndex((a) => a._id === appt._id)
+
+  // Whoever is with the doctor finishes at the later of "now" and their call time + service length.
+  let cursor = now
+  for (const a of line) {
+    if (a.status !== 'called' || !a.calledAt) continue
+    const endMs = Math.max(nowMs, a.calledAt + a.minutes * 60_000)
+    cursor = Math.max(cursor, now + Math.round((endMs - nowMs) / 60_000))
+  }
+  let start = now
+  for (const a of line) {
+    if (a.status === 'called') { if (a._id === appt._id) start = now; continue }
+    start = Math.max(cursor, toMinutes(a.time))
+    if (a._id === appt._id) break
+    cursor = start + a.minutes
+  }
+  if (appt.status === 'called') start = now
+  const delayMinutes = Math.max(0, start - toMinutes(appt.time))
   return {
-    ahead,
-    waitMinutes,
-    averageVisitMinutes: Math.round(avg),
-    estimatedFrom: fromMinutes(start % 1440),
-    estimatedTo: fromMinutes((start + Math.round(avg)) % 1440),
+    ahead: Math.max(0, ahead),
+    waitMinutes: Math.max(0, start - now),
+    delayMinutes,
+    averageVisitMinutes: appt.minutes,
+    estimatedFrom: fromMinutes(Math.min(start, 1439)),
+    estimatedTo: fromMinutes(Math.min(start + appt.minutes, 1439)),
     alertNow: ahead <= appt.alertAhead,
   }
 }
 
-// A slot is taken by any appointment that is not cancelled.
-export const takenTimes = (all: Doc<'appointments'>[]) => new Set(all.filter((a) => a.status !== 'cancelled').map((a) => a.time))
-
 // ---------- booking ----------
-// Same-day booking only: patients book a time for today, the day they are going.
-export async function loadBookableDepartment(ctx: QueryCtx, departmentId: Id<'departments'>) {
-  const dept = await ctx.db.get(departmentId)
+// Patients book a booking day up to MAX_DAYS_AHEAD days ahead (today counts as day 0).
+export const MAX_DAYS_AHEAD = 2
+export const STEP_MINUTES = 15
+export const addDays = (date: string, days: number) => {
+  const d = new Date(`${date}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+export const weekdayOf = (date: string) => new Date(`${date}T12:00:00Z`).getUTCDay()
+
+export function bookingDates(dept: Doc<'departments'>, today = todayLagos()) {
+  const out: string[] = []
+  for (let i = 0; i <= MAX_DAYS_AHEAD; i++) {
+    const d = addDays(today, i)
+    if (dept.bookingDays.includes(weekdayOf(d))) out.push(d)
+  }
+  return out
+}
+
+// Start times where a service of this length fits in the booking hours without overlapping
+// any booking already made (bookings never overlap: one doctor, one line).
+export function freeTimes(dept: Doc<'departments'>, minutes: number, date: string, booked: Doc<'appointments'>[]) {
+  const busy = booked.filter((a) => a.status !== 'cancelled').map((a) => [toMinutes(a.time), toMinutes(a.time) + a.minutes])
+  const close = toMinutes(dept.closesAt)
+  const earliest = date === todayLagos() ? nowMinutesLagos() : 0
+  const out: string[] = []
+  for (let t = toMinutes(dept.opensAt); t + minutes <= close; t += STEP_MINUTES) {
+    if (t < earliest) continue
+    if (busy.some(([s, e]) => t < e && s < t + minutes)) continue
+    out.push(fromMinutes(t))
+  }
+  return out
+}
+
+export async function loadBookableService(ctx: QueryCtx, serviceId: Id<'services'>) {
+  const service = await ctx.db.get(serviceId)
+  const dept = service && (await ctx.db.get(service.departmentId))
   const clinic = dept && (await ctx.db.get(dept.clinicId))
-  if (!dept || !dept.active || !clinic || !clinic.active || clinic.status !== 'approved') return fail('not_found')
-  return { dept, clinic }
+  if (!service || !service.active || !dept || !dept.active || !clinic || !clinic.active || clinic.status !== 'approved') return fail('not_found')
+  return { service, dept, clinic }
 }
 
 export async function bookAppointment(
   ctx: MutationCtx,
-  a: { user: Doc<'users'>; familyMemberId: Id<'familyMembers'>; departmentId: Id<'departments'>; date: string; time: string; alertAhead?: number },
+  a: { user: Doc<'users'>; familyMemberId: Id<'familyMembers'>; serviceId: Id<'services'>; date: string; time: string; alertAhead?: number },
 ) {
-  const today = todayLagos()
-  if (a.date !== today) fail('invalid_date')
   const member = await ctx.db.get(a.familyMemberId)
-  if (!member || member.ownerId !== a.user._id) fail('not_found')
-  const { dept, clinic } = await loadBookableDepartment(ctx, a.departmentId)
+  if (!member || member.ownerId !== a.user._id) return fail('not_found')
+  const { service, dept, clinic } = await loadBookableService(ctx, a.serviceId)
+  if (!bookingDates(dept).includes(a.date)) fail('invalid_date')
 
-  if (!generateSlots(dept.opensAt, dept.closesAt, dept.slotMinutes).includes(a.time)) fail('invalid_slot')
-  if (toMinutes(a.time) < nowMinutesLagos()) fail('slot_past')
-
-  // School clinics: students who missed two bookings cannot book for 7 days (walk-ins still allowed).
+  // School clinics: students who missed two bookings cannot book for 7 days.
   if (clinic.billingType === 'covered') {
     const t = await ctx.db.query('noshowTracking').withIndex('by_user_clinic', (q) => q.eq('userId', a.user._id).eq('clinicId', clinic._id)).first()
     if (t?.blockedUntil && t.blockedUntil > Date.now()) fail('booking_blocked', { until: new Date(t.blockedUntil).toISOString() })
   }
 
   const all = await dayAppointments(ctx, dept._id, a.date)
-  if (all.some((x) => x.status !== 'cancelled' && x.familyMemberId === member!._id)) fail('already_booked')
-  if (takenTimes(all).has(a.time)) fail('slot_taken')
+  if (all.some((x) => x.status !== 'cancelled' && x.familyMemberId === member._id)) fail('already_booked')
+  if (!freeTimes(dept, service.minutes, a.date, all).includes(a.time)) {
+    fail(a.date === todayLagos() && toMinutes(a.time) < nowMinutesLagos() ? 'slot_past' : 'slot_taken')
+  }
 
   const deposit = clinic.billingType === 'paid' ? clinic.depositNaira : 0
   const id = await ctx.db.insert('appointments', {
     clinicId: clinic._id,
     departmentId: dept._id,
-    familyMemberId: member!._id,
+    serviceId: service._id,
+    serviceName: service.name,
+    minutes: service.minutes,
+    familyMemberId: member._id,
     bookedBy: a.user._id,
-    patientName: member!.name,
-    type: 'booked',
+    patientName: member.name,
     date: a.date,
     time: a.time,
     queueNumber: all.reduce((m, x) => Math.max(m, x.queueNumber), 0) + 1,
@@ -174,8 +204,7 @@ export async function cancelAppointment(ctx: MutationCtx, a: { appointmentId: Id
 
 // School-clinic rule: a first no-show is a warning, the second blocks booking for 7 days.
 export async function recordSchoolNoShow(ctx: MutationCtx, appt: Doc<'appointments'>) {
-  if (!appt.bookedBy) return null
-  const t = await ctx.db.query('noshowTracking').withIndex('by_user_clinic', (q) => q.eq('userId', appt.bookedBy!).eq('clinicId', appt.clinicId)).first()
+  const t = await ctx.db.query('noshowTracking').withIndex('by_user_clinic', (q) => q.eq('userId', appt.bookedBy).eq('clinicId', appt.clinicId)).first()
   const count = (t?.missCount ?? 0) + 1
   if (count < 2) {
     if (t) await ctx.db.patch(t._id, { missCount: count })
