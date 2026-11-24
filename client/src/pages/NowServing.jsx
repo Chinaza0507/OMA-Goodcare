@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { connectSocket } from '../lib/socket.js'
+import { connectSocket, pollEvery } from '../lib/socket.js'
 import { gsap } from 'gsap'
 import Logo from '../components/Logo.jsx'
 import { api } from '../api.js'
@@ -67,7 +67,7 @@ export default function NowServing() {
     const s = connectSocket()
     s.on('connect', () => { s.emit('join', { clinicId }); load() })
     s.on('queue:changed', load)
-    const poll = setInterval(load, 30_000)
+    const poll = setInterval(load, pollEvery(30_000))
     const tick = setInterval(() => setNow(new Date()), 10_000)
     return () => { s.disconnect(); clearInterval(poll); clearInterval(tick) }
   }, [clinicId, load])

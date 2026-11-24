@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Navigate } from 'react-router-dom'
-import { connectSocket } from '../lib/socket.js'
+import { connectSocket, pollEvery } from '../lib/socket.js'
 import HospitalShell from '../components/HospitalShell.jsx'
 import { api } from '../api.js'
 import { useAuth } from '../auth.jsx'
@@ -88,7 +88,7 @@ export default function HospitalHome() {
     s.on('connect', () => s.emit('join', { clinicId }))
     s.on('queue:changed', () => load().catch(() => {}))
     const tick = setInterval(() => setNow(Date.now()), 15_000)
-    const poll = setInterval(() => load().catch(() => {}), 45_000)
+    const poll = setInterval(() => load().catch(() => {}), pollEvery(45_000))
     return () => { s.disconnect(); clearInterval(tick); clearInterval(poll) }
   }, [clinicId, load])
 

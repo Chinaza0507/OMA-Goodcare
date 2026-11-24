@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
-import { connectSocket } from '../lib/socket.js'
+import { connectSocket, pollEvery } from '../lib/socket.js'
 import { gsap } from 'gsap'
 import { useGSAP } from '@gsap/react'
 import PatientShell, { Icon } from '../components/PatientShell.jsx'
@@ -240,7 +240,7 @@ export default function Home() {
     const socket = connectSocket()
     socket.on('connect', () => socket.emit('join', { departmentId: liveDept }))
     socket.on('queue:changed', load)
-    const poll = setInterval(load, 30_000)
+    const poll = setInterval(load, pollEvery(30_000))
     return () => { socket.disconnect(); clearInterval(poll) }
   }, [liveDept, load])
 
