@@ -17,3 +17,18 @@ export const createAdmin = internalMutation({
     return `Created admin ${email}. Sign in at /admin.`
   },
 })
+
+// Fix an admin login's email (keeps the password).
+//   npx convex run setup:changeAdminEmail '{"from":"old@example.com","to":"new@example.com"}'
+export const changeAdminEmail = internalMutation({
+  args: { from: v.string(), to: v.string() },
+  handler: async (ctx, a) => {
+    const from = a.from.trim().toLowerCase()
+    const to = cleanEmail(a.to)
+    const admin = (await ctx.db.query('users').withIndex('by_email', (q) => q.eq('email', from)).collect()).find((u) => u.role === 'admin')
+    if (!admin) return fail('not_found')
+    if ((await ctx.db.query('users').withIndex('by_email', (q) => q.eq('email', to)).collect()).some((u) => u.role !== 'patient')) fail('email_taken')
+    await ctx.db.patch(admin._id, { email: to })
+    return `Admin email changed to ${to}. Sign in at /admin.`
+  },
+})
