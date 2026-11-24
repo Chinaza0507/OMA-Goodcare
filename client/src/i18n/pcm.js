@@ -417,7 +417,7 @@ export default {
     empty: 'Your Kolo history go show here once you add money.',
     types: { topup: 'Money wey you add', hold: 'Deposit wey dem hold', deduct: 'E go your visit fee', refund: 'Deposit don return', forfeit: 'Hospital keep deposit (you no come)' },
     how: 'How deposit dey work',
-    howBody: 'When you book, dem go hold ₦300 from your Kolo. E go enter your fee when doctor see you, and e go return if you cancel early. Na only if you no come, hospital go keep am.',
+    howBody: 'We hold ₦300 when you book. E go enter your fee, or return if you cancel early.',
   },
   bookPage: {
     title: 'Book visit',

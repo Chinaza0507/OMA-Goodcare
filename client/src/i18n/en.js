@@ -417,7 +417,7 @@ export default {
     empty: 'Your Kolo history will show here once you add money.',
     types: { topup: 'Money added', hold: 'Deposit held', deduct: 'Paid towards visit', refund: 'Deposit returned', forfeit: 'Deposit kept (missed visit)' },
     how: 'How deposits work',
-    howBody: 'When you book, ₦300 is held from your Kolo. It goes towards your fee when you are seen, and comes back if you cancel early. It only goes to the hospital if you miss the visit.',
+    howBody: '₦300 is held when you book. It goes to your fee, or back to you if you cancel early.',
   },
   bookPage: {
     title: 'Book a visit',

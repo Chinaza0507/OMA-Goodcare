@@ -102,6 +102,10 @@ export default function Kolo() {
               <p className="relative m-0 mt-5 text-center text-xs text-white/75 sm:text-left">{t('koloPage.simulated')}</p>
             </section>
 
+            <section className="rounded-[24px] bg-plum-tint p-5">
+              <h2 className="m-0 text-base font-bold">{t('koloPage.how')}</h2>
+              <p className="m-0 mt-2 text-sm leading-relaxed text-muted">{t('koloPage.howBody')}</p>
+            </section>
             {/* Add money */}
             <form onSubmit={addMoney} className="flex flex-col gap-4 rounded-[24px] bg-white p-5 ring-1 ring-line sm:p-6">
               <h2 className="m-0 text-lg font-bold">{t('koloPage.addTitle')}</h2>
@@ -121,10 +125,6 @@ export default function Kolo() {
               </button>
             </form>
 
-            <section className="rounded-[24px] bg-plum-tint p-5">
-              <h2 className="m-0 text-base font-bold">{t('koloPage.how')}</h2>
-              <p className="m-0 mt-2 text-sm leading-relaxed text-muted">{t('koloPage.howBody')}</p>
-            </section>
             {/* History */}
             <details className="group rounded-[24px] bg-white p-5 ring-1 ring-line sm:p-6">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-lg font-bold [&::-webkit-details-marker]:hidden">
