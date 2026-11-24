@@ -1,8 +1,8 @@
-// The Kolo: a little piggy bank. It floats gently; when money is added (drop changes),
+// The Kolo: a little piggy bank. It stands still; when money is added (drop changes),
 // a coin falls into the slot and the pig gives a happy wiggle. Pure CSS animation.
 export default function Piggy({ drop = 0, size = 150 }) {
   return (
-    <div className="relative oma-float" style={{ width: size, height: size * 0.86 }} aria-hidden="true">
+    <div className="relative" style={{ width: size, height: size * 0.86 }} aria-hidden="true">
       {drop > 0 && (
         <svg key={`coin-${drop}`} viewBox="0 0 40 40" className="kolo-coin absolute left-1/2 top-0 z-10" style={{ width: size * 0.2, marginLeft: -size * 0.1 }}>
           <circle cx="20" cy="20" r="17" fill="#f6c443" stroke="#c98d14" strokeWidth="3" />

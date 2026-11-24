@@ -85,8 +85,7 @@ export default function Kolo() {
           <p className="m-0 mt-1 text-[15px] text-muted">{t('koloPage.sub')}</p>
         </div>
 
-        <div className="grid items-start gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="flex flex-col gap-5">
+        <div className="mx-auto flex w-full max-w-2xl flex-col gap-5">
             {/* Balance with the Kolo piggy bank */}
             <section className="relative overflow-hidden rounded-[28px] bg-[linear-gradient(150deg,var(--color-plum)_0%,var(--color-plum-dark)_100%)] p-6 text-white shadow-[0_24px_50px_rgba(90,45,176,0.25)] sm:p-7">
               <div aria-hidden="true" className="pointer-events-none absolute -right-14 -top-14 h-52 w-52 rounded-full bg-white/[0.07]" />
@@ -103,9 +102,36 @@ export default function Kolo() {
               <p className="relative m-0 mt-5 text-center text-xs text-white/75 sm:text-left">{t('koloPage.simulated')}</p>
             </section>
 
+            {/* Add money */}
+            <form onSubmit={addMoney} className="flex flex-col gap-4 rounded-[24px] bg-white p-5 ring-1 ring-line sm:p-6">
+              <h2 className="m-0 text-lg font-bold">{t('koloPage.addTitle')}</h2>
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[15px] font-semibold">{t('koloPage.amountLabel')}</span>
+                <span className="relative">
+                  <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 font-display text-xl font-bold text-muted">₦</span>
+                  <input inputMode="numeric" value={custom ? Number(custom).toLocaleString('en-NG') : ''} onChange={(e) => { setCustom(e.target.value.replace(/\D/g, '').slice(0, 6)); setNote(null) }}
+                    placeholder={t('koloPage.amountPh')} aria-label={t('koloPage.amountLabel')}
+                    className="min-h-14 w-full rounded-2xl border-[1.5px] border-line bg-white pl-10 pr-4 font-display text-2xl font-bold text-ink" />
+                </span>
+              </label>
+              {note && <p role={note.ok ? 'status' : 'alert'} className={`m-0 text-sm font-semibold ${note.ok ? 'text-[#1d6b3a]' : 'text-rose'}`}>{note.text}</p>}
+              <button type="submit" disabled={busy}
+                className={`min-h-[52px] rounded-2xl border-0 text-base font-bold ${valid && !busy ? 'cursor-pointer bg-rose text-white hover:bg-rose-dark' : 'cursor-not-allowed bg-[#efe7ec] text-[#6b5a65]'}`}>
+                {busy ? t('common.loading') : t('koloPage.addBtn').replace('{amount}', valid ? naira(chosen) : '')}
+              </button>
+            </form>
+
+            <section className="rounded-[24px] bg-plum-tint p-5">
+              <h2 className="m-0 text-base font-bold">{t('koloPage.how')}</h2>
+              <p className="m-0 mt-2 text-sm leading-relaxed text-muted">{t('koloPage.howBody')}</p>
+            </section>
             {/* History */}
-            <section className="rounded-[24px] bg-white p-5 ring-1 ring-line sm:p-6">
-              <h2 className="m-0 mb-3 text-lg font-bold">{t('koloPage.history')}</h2>
+            <details className="group rounded-[24px] bg-white p-5 ring-1 ring-line sm:p-6">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-lg font-bold [&::-webkit-details-marker]:hidden">
+                <span>{t('koloPage.history')}{history?.length ? <span className="ml-2 text-sm font-semibold text-muted">· {history.length}</span> : null}</span>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="text-muted transition-transform group-open:rotate-180"><path d="m6 9 6 6 6-6" /></svg>
+              </summary>
+              <div className="mt-4">
               {history === null ? (
                 <div aria-hidden="true" className="h-40 animate-pulse rounded-2xl bg-[#efe7ec]" />
               ) : history.length === 0 ? (
@@ -131,34 +157,8 @@ export default function Kolo() {
                   })}
                 </ul>
               )}
-            </section>
-          </div>
-
-          <div className="flex flex-col gap-5">
-            {/* Add money */}
-            <form onSubmit={addMoney} className="flex flex-col gap-4 rounded-[24px] bg-white p-5 ring-1 ring-line sm:p-6">
-              <h2 className="m-0 text-lg font-bold">{t('koloPage.addTitle')}</h2>
-              <label className="flex flex-col gap-1.5">
-                <span className="text-[15px] font-semibold">{t('koloPage.amountLabel')}</span>
-                <span className="relative">
-                  <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 font-display text-xl font-bold text-muted">₦</span>
-                  <input inputMode="numeric" value={custom ? Number(custom).toLocaleString('en-NG') : ''} onChange={(e) => { setCustom(e.target.value.replace(/\D/g, '').slice(0, 6)); setNote(null) }}
-                    placeholder={t('koloPage.amountPh')} aria-label={t('koloPage.amountLabel')}
-                    className="min-h-14 w-full rounded-2xl border-[1.5px] border-line bg-white pl-10 pr-4 font-display text-2xl font-bold text-ink" />
-                </span>
-              </label>
-              {note && <p role={note.ok ? 'status' : 'alert'} className={`m-0 text-sm font-semibold ${note.ok ? 'text-[#1d6b3a]' : 'text-rose'}`}>{note.text}</p>}
-              <button type="submit" disabled={busy}
-                className={`min-h-[52px] rounded-2xl border-0 text-base font-bold ${valid && !busy ? 'cursor-pointer bg-rose text-white hover:bg-rose-dark' : 'cursor-not-allowed bg-[#efe7ec] text-[#6b5a65]'}`}>
-                {busy ? t('common.loading') : t('koloPage.addBtn').replace('{amount}', valid ? naira(chosen) : '')}
-              </button>
-            </form>
-
-            <section className="rounded-[24px] bg-plum-tint p-5">
-              <h2 className="m-0 text-base font-bold">{t('koloPage.how')}</h2>
-              <p className="m-0 mt-2 text-sm leading-relaxed text-muted">{t('koloPage.howBody')}</p>
-            </section>
-          </div>
+            </div>
+            </details>
         </div>
       </div>
     </PatientShell>
