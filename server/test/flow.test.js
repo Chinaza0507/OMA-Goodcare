@@ -24,7 +24,7 @@ Object.assign(process.env, {
 const { default: app } = await import('../src/app.js')
 const { pool } = await import('../src/db.js')
 const { hashSecret } = await import('../src/lib/secret.js')
-const { todayLagos, addDays } = await import('../src/lib/time.js')
+const { todayLagos, addDays, nowMinutesLagos, toMinutes } = await import('../src/lib/time.js')
 
 let server
 let base
@@ -47,6 +47,8 @@ const expectErr = (r, status, code) => {
 
 const today = todayLagos()
 const tomorrow = addDays(today, 1)
+// Booking is same-day only, so "far enough away to cancel early" means a free time later today.
+const laterToday = async (deptId, minutesAhead) => (await freeSlots(deptId)).find((s) => toMinutes(s) >= nowMinutesLagos() + minutesAhead)
 const hospital = (over = {}) => ({
   hospitalName: 'Test General Hospital', type: 'private', state: 'Lagos', area: 'Yaba',
   address: '1 Test Road', landmark: 'Opposite the market', email: 'frontdesk@testgeneral.example.com', password: 'managerpass1', ...over,
@@ -57,7 +59,7 @@ const freeSlots = async (deptId, date = today) =>
 
 before(async () => {
   await pool.query(`
-    DROP TABLE IF EXISTS action_log, noshow_tracking, kolo_transactions, appointments,
+    DROP TABLE IF EXISTS pin_resets, action_log, noshow_tracking, kolo_transactions, appointments,
       kolo_wallets, family_members, users, departments, clinics CASCADE;
     DROP FUNCTION IF EXISTS forbid_change() CASCADE;`)
   await pool.query(await readFile(new URL('../db/schema.sql', import.meta.url), 'utf8'))
@@ -278,15 +280,22 @@ describe('Oma backend', () => {
     expectErr(await api('POST', `/api/staff/departments/${S.deptA}/call-next`, {}, S.staffA), 409, 'nobody_waiting')
   })
 
+  test('booking is same-day only', async () => {
+    expectErr(await api('POST', '/api/appointments', { familyMemberId: S.adaChild, departmentId: S.deptA, date: tomorrow, time: '12:00' }, S.ada), 400, 'invalid_date')
+    expectErr(await api('GET', `/api/clinics/departments/${S.deptA}/slots?date=${tomorrow}`), 400, 'invalid_date')
+  })
+
   test('cancelling: early returns the deposit, late asks first then forfeits', async () => {
     const book = (date, time) => api('POST', '/api/appointments', { familyMemberId: S.adaChild, departmentId: S.deptA, date, time }, S.ada)
 
-    const early = await book(tomorrow, '12:00')
+    const earlyTime = await laterToday(S.deptA, 150)
+    assert.ok(earlyTime, 'need a free time at least 2.5 hours from now (run the test before about 21:00 Lagos time)')
+    const early = await book(today, earlyTime)
     expectOk(early, 201)
     assert.equal(early.body.appointment.cancelRefundsDeposit, true)
     const c1 = await api('POST', `/api/appointments/${early.body.appointment.id}/cancel`, {}, S.ada)
     assert.equal(c1.body.depositStatus, 'returned')
-    assert.ok((await freeSlots(S.deptA, tomorrow)).includes('12:00'), 'a cancelled slot is released immediately')
+    assert.ok((await freeSlots(S.deptA, today)).includes(earlyTime), 'a cancelled slot is released immediately')
 
     const late = await book(today, S.slots[3])
     expectOk(late, 201)
@@ -395,9 +404,14 @@ describe('Oma backend', () => {
 
     const stu = await register('Tunde Student', '08031110070')
     const self = (await api('GET', '/api/family', undefined, stu.body.token)).body.members[0].id
-    const book = (date, time) => api('POST', '/api/appointments', { familyMemberId: self, departmentId: deptId, date, time }, stu.body.token)
+    const book = (date, time, dept = deptId) => api('POST', '/api/appointments', { familyMemberId: self, departmentId: dept, date, time }, stu.body.token)
+    // Booking is same-day only and one visit per department per day, so the second and third
+    // bookings use two more departments at the same school clinic.
+    const extraDept = async (name) => (await api('POST', '/api/manager/departments', { name, consultationFee: null, opensAt: '00:00', closesAt: '23:50', slotMinutes: 10, avgVisitMinutes: 10 }, mgr.token)).body.department.id
+    const dept2 = await extraDept('Sick bay')
+    const dept3 = await extraDept('Counselling')
 
-    const b1 = await book(tomorrow, '10:00')
+    const b1 = await book(today, (await freeSlots(deptId))[0])
     expectOk(b1, 201)
     assert.equal(b1.body.appointment.deposit.status, 'none')
     assert.equal((await api('GET', '/api/kolo', undefined, stu.body.token)).body.available, 0)
@@ -412,15 +426,16 @@ describe('Oma backend', () => {
     assert.equal(me1.body.noShowStatus[0].missCount, 1)
     assert.equal(me1.body.noShowStatus[0].blockedUntil, null)
 
-    const b2 = await book(addDays(today, 2), '10:00')
+    const b2 = await book(today, (await freeSlots(dept2))[0], dept2)
     expectOk(b2, 201)
     const m2 = await miss(b2.body.appointment.id)
     assert.ok(m2.body.studentRule.blockedUntil)
-    const blocked = await book(addDays(today, 3), '10:00')
+    const blocked = await book(today, (await freeSlots(dept3))[0], dept3)
     expectErr(blocked, 403, 'booking_blocked')
     assert.ok(blocked.body.until)
 
-    const walk = await api('POST', '/api/staff/walk-ins', { departmentId: deptId, name: 'Tunde Student', phone: '08031110070' }, mgr.token)
+    // Walk-ins are still allowed while online booking is blocked.
+    const walk = await api('POST', '/api/staff/walk-ins', { departmentId: dept3, name: 'Tunde Student', phone: '08031110070' }, mgr.token)
     expectOk(walk, 201)
     const students = await api('GET', '/api/staff/noshows', undefined, mgr.token)
     assert.equal(students.body.students[0].name, 'Tunde Student')
@@ -434,6 +449,54 @@ describe('Oma backend', () => {
     expectErr(await api('POST', '/api/auth/work-login', { email: 'joy@testgeneral.example.com', password: 'staffpass12' }), 403, 'account_disabled')
   })
 
+  test('forgot PIN: code, wrong code, reset, old PIN stops working', async () => {
+    expectOk(await register('Bola Forget', '08031110095', '1111'), 201)
+    // Unknown numbers get the same answer (no code), so numbers can't be probed.
+    const unknown = await api('POST', '/api/auth/forgot-pin', { phone: '08039990000' })
+    expectOk(unknown)
+    assert.equal(unknown.body.practiceCode, undefined)
+
+    const f = await api('POST', '/api/auth/forgot-pin', { phone: '08031110095' })
+    expectOk(f)
+    const code = f.body.practiceCode
+    assert.match(code, /^\d{6}$/)
+    const wrong = code === '000000' ? '111111' : '000000'
+    const bad = await api('POST', '/api/auth/reset-pin', { phone: '08031110095', code: wrong, pin: '2222' })
+    expectErr(bad, 400, 'bad_code')
+    assert.equal(bad.body.triesLeft, 4)
+    expectOk(await api('POST', '/api/auth/reset-pin', { phone: '08031110095', code, pin: '2222' }))
+    expectErr(await api('POST', '/api/auth/reset-pin', { phone: '08031110095', code, pin: '3333' }), 400, 'code_expired') // single use
+    expectErr(await api('POST', '/api/auth/login', { phone: '08031110095', secret: '1111' }), 401, 'bad_credentials')
+    expectOk(await api('POST', '/api/auth/login', { phone: '08031110095', secret: '2222' }))
+  })
+
+  test('profile: edit name and email, change PIN, delete account', async () => {
+    const r = await register('Kemi Adeyemi', '08031110090', '2468')
+    expectOk(r, 201)
+    const tok = r.body.token
+    // Edit name and email; the "self" family member follows the new name.
+    const e = await api('PATCH', '/api/auth/me', { name: 'Kemi Bello', email: 'Kemi@Example.com' }, tok)
+    expectOk(e)
+    assert.equal(e.body.user.email, 'kemi@example.com')
+    assert.equal((await api('GET', '/api/family', undefined, tok)).body.members.find((m) => m.isSelf).name, 'Kemi Bello')
+    expectOk(await api('PATCH', '/api/auth/me', { email: '' }, tok))
+    assert.equal((await api('GET', '/api/auth/me', undefined, tok)).body.user.email, null)
+
+    // Change PIN: wrong current PIN refused; new PIN must be 4 digits; then log in with it.
+    expectErr(await api('POST', '/api/auth/change-secret', { current: '0000', next: '1357' }, tok), 401, 'wrong_secret')
+    expectErr(await api('POST', '/api/auth/change-secret', { current: '2468', next: '12ab' }, tok), 400, 'invalid_input')
+    expectOk(await api('POST', '/api/auth/change-secret', { current: '2468', next: '1357' }, tok))
+    expectErr(await api('POST', '/api/auth/login', { phone: '08031110090', secret: '2468' }), 401, 'bad_credentials')
+    expectOk(await api('POST', '/api/auth/login', { phone: '08031110090', secret: '1357' }))
+
+    // Delete account: needs the PIN; afterwards the person can't log in and their phone is free again.
+    expectErr(await api('POST', '/api/auth/delete-account', { secret: '0000' }, tok), 401, 'wrong_secret')
+    expectOk(await api('POST', '/api/auth/delete-account', { secret: '1357' }, tok))
+    expectErr(await api('POST', '/api/auth/login', { phone: '08031110090', secret: '1357' }), 401, 'bad_credentials')
+    expectErr(await api('GET', '/api/family', undefined, tok), 403, 'account_disabled')
+    expectOk(await register('Kemi Again', '08031110090', '9999'), 201)
+  })
+
   test('the Kolo history and action log cannot be edited or deleted', async () => {
     await assert.rejects(pool.query(`UPDATE kolo_transactions SET amount_naira = 1`), /append-only/)
     await assert.rejects(pool.query(`DELETE FROM kolo_transactions`), /append-only/)
@@ -442,8 +505,8 @@ describe('Oma backend', () => {
   })
 
   test('removing a family member cancels their upcoming visits', async () => {
-    const slot = (await freeSlots(S.deptA, tomorrow))[0]
-    const b = await api('POST', '/api/appointments', { familyMemberId: S.adaChild, departmentId: S.deptA, date: tomorrow, time: slot }, S.ada)
+    const slot = (await freeSlots(S.deptA, today))[0]
+    const b = await api('POST', '/api/appointments', { familyMemberId: S.adaChild, departmentId: S.deptA, date: today, time: slot }, S.ada)
     expectOk(b, 201)
     const before_ = (await api('GET', '/api/kolo', undefined, S.ada)).body
     expectOk(await api('DELETE', `/api/family/${S.adaChild}`, undefined, S.ada), 204)

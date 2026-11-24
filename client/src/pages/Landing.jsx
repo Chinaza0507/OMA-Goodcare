@@ -99,13 +99,13 @@ export default function Landing() {
               <div className="text-[13px] text-muted">Good afternoon o,</div>
               <div className="-mt-2 font-display text-xl font-bold">Ngozi Okafor</div>
               <div className="flex flex-col gap-2.5 rounded-[18px] bg-rose p-3.5 text-white">
-                <div className="flex justify-between text-[11px] font-semibold uppercase tracking-wide text-[#f6d9e7]"><span>Your line</span><span>P-014</span></div>
+                <div className="flex justify-between text-[11px] font-semibold uppercase tracking-wide text-rose-tint"><span>Your line</span><span>P-014</span></div>
                 <div className="text-[15px] font-bold">Chidi · Paediatrics</div>
                 <div className="flex gap-2">
-                  <div className="flex-1 rounded-[10px] bg-white/10 px-2.5 py-2"><div className="font-display text-[26px] font-extrabold leading-none">4th</div><div className="text-[11px] text-[#f6d9e7]">for line</div></div>
-                  <div className="flex-1 rounded-[10px] bg-white/10 px-2.5 py-2"><div className="font-display text-[26px] font-extrabold leading-none">~25m</div><div className="text-[11px] text-[#f6d9e7]">e remain</div></div>
+                  <div className="flex-1 rounded-[10px] bg-white/10 px-2.5 py-2"><div className="font-display text-[26px] font-extrabold leading-none">4th</div><div className="text-[11px] text-rose-tint">for line</div></div>
+                  <div className="flex-1 rounded-[10px] bg-white/10 px-2.5 py-2"><div className="font-display text-[26px] font-extrabold leading-none">~25m</div><div className="text-[11px] text-rose-tint">e remain</div></div>
                 </div>
-                <div className="rounded-[10px] bg-plum-soft p-2 text-center text-[13px] font-bold text-[#2a1458]">Reach clinic before 11:20 am</div>
+                <div className="rounded-[10px] bg-plum-soft p-2 text-center text-[13px] font-bold text-plum-deep">Reach clinic before 11:20 am</div>
               </div>
               <div className="flex items-center gap-2.5 rounded-[14px] border border-line bg-white px-3 py-2.5">
                 <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blush text-rose">
@@ -174,8 +174,8 @@ export default function Landing() {
               <span className="text-sm font-bold uppercase tracking-[0.06em] text-plum-soft">ỌMA Kolo</span>
             </span>
             <h2 className={h2}>{L('koloTitle')}</h2>
-            <p className="m-0 text-[1.1rem] leading-relaxed text-[#f6d9e7]">{L('koloBody')}</p>
-            <p className="m-0 -rotate-2 font-hand text-[26px] font-semibold text-[#ffe3ee]">(small-small, e go full!)</p>
+            <p className="m-0 text-[1.1rem] leading-relaxed text-rose-tint">{L('koloBody')}</p>
+            <p className="m-0 -rotate-2 font-hand text-[26px] font-semibold text-rose-tint">(small-small, e go full!)</p>
             <a href="#faq" className="flex min-h-[52px] items-center self-start rounded-[14px] border-2 border-white bg-plum px-6 text-base font-bold !text-white no-underline hover:bg-plum-dark">{L('koloBtn')}</a>
           </div>
           <div className="flex flex-[1_1_300px] justify-center">
@@ -195,7 +195,7 @@ export default function Landing() {
       <section id="hospitals" className={`${wrap} border-t-2 border-line py-[72px]`}>
         <div className="flex flex-wrap items-center gap-9">
           <div className="flex min-w-0 flex-[1_1_420px] flex-col gap-4">
-            <span className="self-start rounded-full border-[1.5px] border-[#f0c3d6] bg-blush px-4 py-2 text-[15px] font-extrabold uppercase tracking-[0.06em] text-rose">{L('hospKicker')}</span>
+            <span className="self-start rounded-full border-[1.5px] border-rose-line bg-blush px-4 py-2 text-[15px] font-extrabold uppercase tracking-[0.06em] text-rose">{L('hospKicker')}</span>
             <h2 className={h2}>{L('hospTitle')}</h2>
             <p className="m-0 text-[1.1rem] leading-relaxed text-muted">{L('hospBody')}</p>
             <ul className="m-0 flex list-none flex-col gap-2.5 p-0 text-base">
@@ -207,7 +207,7 @@ export default function Landing() {
             {[['G-012', 'Baba Musa', 'Arrived'], ['G-013', 'Amaka', 'Arrived'], ['G-014', 'Ifeanyi', 'Not here yet'], ['G-015', 'Halima', 'Arrived']].map(([no, name, st]) => (
               <div key={no} className="flex items-center gap-2.5 rounded-xl px-3 py-2.5">
                 <span className="w-14 font-display text-base font-extrabold">{no}</span><span className="flex-1 text-[15px] font-semibold">{name}</span>
-                <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold ${st === 'Arrived' ? 'bg-blush text-[#2a1458]' : 'bg-[#f7eef2] text-muted'}`}>{st}</span>
+                <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-bold ${st === 'Arrived' ? 'bg-blush text-plum-deep' : 'bg-[#f7eef2] text-muted'}`}>{st}</span>
               </div>
             ))}
             <div className="flex min-h-12 items-center justify-center rounded-xl bg-plum text-[15px] font-bold text-white">Call next patient</div>
@@ -247,7 +247,7 @@ export default function Landing() {
             <span className="flex items-end gap-2 text-white"><span className="flex font-['Marcellus',Georgia,serif] text-[28px] leading-[0.9]"><span className="relative">O<span className="absolute bottom-[-6px] left-1/2 -ml-[2.5px] h-[5px] w-[5px] rounded-full bg-current" /></span>MA</span><span className="font-['Cormorant_Garamond',Georgia,serif] text-sm font-semibold italic leading-none tracking-[0.02em]">Good<br />Care</span></span>
             <span>{L('tagline')}</span>
             <span className="font-semibold text-white">{L('emergency')}</span>
-            <span className="flex items-center gap-1.5 font-hand text-[21px] font-semibold text-[#f6d9e7]">Made with love for every Nigerian who don wait too long <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.5-9.2C1 8.3 3.2 4.5 7 4.5c2.1 0 3.6 1.1 5 2.9 1.4-1.8 2.9-2.9 5-2.9 3.8 0 6 3.8 4.5 7.3C19.5 16.4 12 21 12 21z" fill="#F6D9E7" /></svg></span>
+            <span className="flex items-center gap-1.5 font-hand text-[21px] font-semibold text-rose-tint">Made with love for every Nigerian who don wait too long <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-7.5-4.6-9.5-9.2C1 8.3 3.2 4.5 7 4.5c2.1 0 3.6 1.1 5 2.9 1.4-1.8 2.9-2.9 5-2.9 3.8 0 6 3.8 4.5 7.3C19.5 16.4 12 21 12 21z" fill="#F6D9E7" /></svg></span>
           </div>
           <nav aria-label={L('footer')} className="flex flex-wrap gap-x-7 gap-y-2.5">
             <a href="#how" className="text-[#e8dce3] underline">{t('nav.how')}</a>

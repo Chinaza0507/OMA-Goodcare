@@ -8,6 +8,9 @@ export class ApiError extends Error {
   }
 }
 
+// Server address. Empty in development (Vite forwards /api); set VITE_API_URL when deployed.
+export const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+
 export const getToken = () => {
   try { return localStorage.getItem('oma_token') } catch { return null }
 }
@@ -22,7 +25,7 @@ export async function api(path, { method = 'GET', body } = {}) {
   const token = getToken()
   let res
   try {
-    res = await fetch(`/api${path}`, {
+    res = await fetch(`${API_URL}/api${path}`, {
       method,
       headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: body ? JSON.stringify(body) : undefined,

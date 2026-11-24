@@ -3,6 +3,8 @@ import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import Logo from '../components/Logo.jsx'
 import { ErrorLine, Field, PrimaryButton, TextInput } from '../components/fields.jsx'
 import { api } from '../api.js'
+import { getPosition } from '../lib/geo.js'
+import Hospital3D from '../components/Hospital3D.jsx'
 import { useAuth } from '../auth.jsx'
 import en from '../i18n/en.js'
 
@@ -35,37 +37,6 @@ const Wordmark = ({ className = '' }) => (
   </span>
 )
 
-// Line drawing of a hospital with trees.
-function HospitalLineArt({ className = '' }) {
-  const ink = '#3a1a78'
-  return (
-    <svg aria-hidden="true" viewBox="0 0 600 330" className={className} fill="none" stroke={ink} strokeWidth="4" strokeLinejoin="round" strokeLinecap="round">
-      {/* side wing */}
-      <path d="M40 330 V180 H170 V330" fill="#fcebf2" />
-      {[200, 240, 280].map((y) => [65, 105, 145].map((x) => <rect key={`${x}-${y}`} x={x - 12} y={y} width="24" height="22" rx="3" fill="#fff" />))}
-      {/* main block */}
-      <path d="M170 330 V90 H430 V330" fill="#efe8fc" />
-      <path d="M170 90 L300 40 L430 90" fill="#fbfaf5" />
-      <circle cx="300" cy="72" r="18" fill="#fff" />
-      <path d="M300 62 V82 M290 72 H310" stroke="#8c1d52" strokeWidth="5" />
-      {[120, 165, 210].map((y) => [205, 250, 350, 395].map((x) => <rect key={`${x}-${y}`} x={x - 14} y={y} width="28" height="26" rx="3" fill="#fff" />))}
-      {/* door + sign */}
-      <rect x="268" y="262" width="64" height="68" rx="6" fill="#d6c6ff" />
-      <path d="M300 262 V330" />
-      <rect x="238" y="232" width="124" height="20" rx="4" fill="#fff" />
-      <path d="M254 242 H346" strokeWidth="3" strokeDasharray="2 7" />
-      {/* other wing */}
-      <path d="M430 330 V150 H540 V330" fill="#f6f1e6" />
-      {[180, 225, 270].map((y) => [460, 510].map((x) => <rect key={`${x}-${y}`} x={x - 12} y={y} width="24" height="24" rx="3" fill="#fff" />))}
-      {/* trees */}
-      {[[18, 280], [585, 285], [560, 300]].map(([x, y], i) => (
-        <g key={i}><path d={`M${x} 330 V${y + 10}`} /><circle cx={x} cy={y - 8} r="22" fill="#fff" /><path d={`M${x} ${y + 4} L${x - 9} ${y - 6} M${x} ${y + 4} L${x + 9} ${y - 6}`} strokeWidth="3" /></g>
-      ))}
-      <path d="M0 330 H600" />
-    </svg>
-  )
-}
-
 // Deep purple page with a compact card: form on the left (lavender), message and a
 // hospital drawing on the right, with pink (rose) touches.
 // Background: deep purple. Add ?bg=light to the address to see the light version
@@ -78,7 +49,7 @@ function HospitalLayout({ t, dark, children }) {
       dark ? 'bg-[#2f1563]' : 'bg-[linear-gradient(140deg,#e6dcf7_0%,#ddd1f2_45%,#f3dceb_100%)]'}`}>
       <Logo className={`pointer-events-none absolute -left-24 top-10 -z-10 ${dark ? 'text-white opacity-[0.05]' : 'text-plum opacity-[0.07]'}`} width={520} />
       <Logo className={`pointer-events-none absolute -bottom-28 -right-20 -z-10 ${dark ? 'text-white opacity-[0.05]' : 'text-plum opacity-[0.07]'}`} width={560} />
-      <div className={`mx-auto w-full max-w-[1040px] overflow-hidden rounded-[28px] bg-[#f7f3fc] lg:grid lg:h-full lg:max-h-[780px] lg:grid-cols-[1.25fr_1fr] lg:grid-rows-1 ${
+      <div className={`mx-auto w-full max-w-[1040px] overflow-hidden rounded-[28px] bg-[#f7f3fc] lg:grid lg:h-full lg:max-h-[830px] lg:grid-cols-[1.25fr_1fr] lg:grid-rows-1 ${
         dark ? 'shadow-[0_24px_60px_rgba(10,3,25,0.45)]' : 'shadow-[0_24px_60px_rgba(90,45,176,0.18)] ring-1 ring-white/70'}`}>
         <div className="flex flex-col px-5 pb-7 pt-5 sm:px-9 lg:min-h-0 lg:overflow-y-auto lg:py-7">
           <Link to="/" aria-label="ỌMA home" className="self-start text-plum no-underline"><Wordmark /></Link>
@@ -94,7 +65,7 @@ function HospitalLayout({ t, dark, children }) {
             <span className="flex h-10 w-10 items-center justify-center rounded-full bg-plum text-white"><Logo width={24} /></span>
             <span className="text-sm font-semibold text-muted">{t('hospital.quoteBy')}</span>
           </div>
-          <HospitalLineArt className="absolute inset-x-0 bottom-0 h-auto w-full" />
+          <Hospital3D className="absolute inset-x-0 bottom-0 h-auto w-full [mask-image:linear-gradient(to_bottom,#000_0%,#000_45%,transparent_100%)]" />
         </div>
       </div>
     </div>
@@ -111,6 +82,8 @@ export default function Hospital({ mode = 'register' }) {
   const registered = mode === 'login' && location.state?.registered === true
   const [step, setStep] = useState(1)
   const [f, setF] = useState({ hospitalName: '', type: 'private', state: '', area: '', address: '', landmark: '', email: location.state?.email ?? '', password: '', confirm: '' })
+  const [spot, setSpot] = useState(null) // { lat, lng } when the hospital shares its location
+  const [spotState, setSpotState] = useState('idle') // idle | locating | failed
   const [tried, setTried] = useState(false)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
@@ -161,6 +134,7 @@ export default function Hospital({ mode = 'register' }) {
         body: {
           hospitalName: f.hospitalName.trim(), type: f.type, state: f.state.trim(), area: f.area.trim(),
           address: f.address.trim(), landmark: f.landmark.trim() || undefined, email, password: f.password, language: lang,
+          ...(spot ? { latitude: spot.lat, longitude: spot.lng } : {}),
         },
       })
       // Registered: go to the log-in page with the email ready.
@@ -239,6 +213,15 @@ export default function Hospital({ mode = 'register' }) {
         <Field id="h-landmark" label={<>{t('hospital.landmark')} <span className="font-normal text-muted">({t('hospital.optional')})</span></>}>
           <TextInput id="h-landmark" value={f.landmark} onChange={(e) => set('landmark')(e.target.value)} placeholder={t('hospital.landmarkPh')} ok={f.landmark.trim().length > 1} />
         </Field>
+        </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <button type="button" disabled={spotState === 'locating'}
+            onClick={async () => { setSpotState('locating'); try { setSpot(await getPosition()); setSpotState('idle') } catch { setSpotState('failed') } }}
+            className={`flex min-h-9 cursor-pointer items-center gap-2 rounded-xl border-[1.5px] px-3 text-[13px] font-bold disabled:cursor-wait ${spot ? 'border-[#9bd3ae] bg-[#eef8f1] text-[#1d6b3a]' : 'border-rose bg-white text-rose hover:bg-blush'}`}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{spot ? <path d="M5 12l5 5L20 7" /> : <><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" /></>}</svg>
+            {spot ? t('hospital.locationSaved') : spotState === 'locating' ? t('find.locating') : t('hospital.useLocation')}
+          </button>
+          <span className={`hospital-sub min-w-0 flex-1 text-[12px] leading-snug ${spotState === 'failed' ? 'text-rose' : 'text-muted'}`}>{spotState === 'failed' ? t('hospital.locationFail') : !spot ? t('hospital.locationHelp') : ''}</span>
         </div>
       </>
     )}

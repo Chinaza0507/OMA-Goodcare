@@ -40,6 +40,7 @@ const clinicJson = (c, departments) => ({
   state: c.state,
   area: c.area,
   address: c.address,
+  landmark: c.landmark,
   billingType: c.billing_type,
   depositNaira: c.billing_type === 'paid' ? c.deposit_naira : 0,
   cancelWindowMinutes: c.cancel_window_minutes,

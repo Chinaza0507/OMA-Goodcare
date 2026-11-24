@@ -59,7 +59,7 @@ export const ErrorLine = ({ children }) =>
   ) : null
 
 // tone 'rose' is the pink brand colour (used on the hospital pages).
-const TONES = { plum: 'bg-plum text-white hover:bg-plum-dark', rose: 'bg-rose text-white hover:bg-[#6f1641]' }
+const TONES = { plum: 'bg-plum text-white hover:bg-plum-dark', rose: 'bg-rose text-white hover:bg-rose-dark' }
 export const PrimaryButton = ({ ready = true, busy, tone = 'plum', children, ...props }) => (
   <button
     type="submit"

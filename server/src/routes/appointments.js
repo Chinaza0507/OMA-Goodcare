@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { query, withTx } from '../db.js'
-import { requireAuth, requireRole } from '../middleware/auth.js'
+import { requireAuth, requireRole, ensureActive } from '../middleware/auth.js'
 import { AppError } from '../lib/errors.js'
 import { bookAppointment, cancelAppointment } from '../lib/booking.js'
 import { queueInfo, ACTIVE_STATUSES } from '../lib/queue.js'
@@ -9,7 +9,8 @@ import { emitQueueChanged } from '../lib/realtime.js'
 import { slotInstant, todayLagos } from '../lib/time.js'
 
 const router = Router()
-router.use(requireAuth, requireRole('patient'))
+// ensureActive: a disabled or deleted account loses access at once, even with a valid token.
+router.use(requireAuth, ensureActive, requireRole('patient'))
 
 const bookSchema = z.object({
   familyMemberId: z.uuid(),

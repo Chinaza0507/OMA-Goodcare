@@ -174,3 +174,15 @@ CREATE TRIGGER kolo_tx_append_only BEFORE UPDATE OR DELETE ON kolo_transactions
 DROP TRIGGER IF EXISTS action_log_append_only ON action_log;
 CREATE TRIGGER action_log_append_only BEFORE UPDATE OR DELETE ON action_log
   FOR EACH ROW EXECUTE FUNCTION forbid_change();
+
+-- One-time codes for "Forgot PIN". Stored hashed, expire after 10 minutes, 5 tries, single use.
+CREATE TABLE IF NOT EXISTS pin_resets (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID NOT NULL REFERENCES users (id),
+  code_hash  TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  attempts   INTEGER NOT NULL DEFAULT 0,
+  used_at    TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS pin_resets_user_idx ON pin_resets (user_id, created_at DESC);

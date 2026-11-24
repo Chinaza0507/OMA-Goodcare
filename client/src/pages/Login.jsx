@@ -50,6 +50,7 @@ export default function Login() {
         </Field>
         <Field id="l-pin" label={t('login.pin')}>
           <PinInput id="l-pin" value={pin} onChange={setPin} ok={pinOk} autoComplete="current-password" />
+          <Link to="/forgot-pin" className="self-end text-sm font-bold text-plum no-underline hover:underline">{t('forgot.link')}</Link>
         </Field>
         <ErrorLine>{serverError || (tried && !phoneOk ? t('login.needPhone') : tried && !pinOk ? t('login.needPin') : '')}</ErrorLine>
         <PrimaryButton ready={ready} busy={busy}>{busy ? t('common.loading') : t('login.submit')}</PrimaryButton>

@@ -2,7 +2,8 @@ import { AppError } from './errors.js'
 import { generateSlots, nowMinutesLagos, slotInstant, toMinutes, todayLagos, addDays } from './time.js'
 import { hold, settleDeposit } from './kolo.js'
 
-export const MAX_DAYS_AHEAD = 7
+// Same-day booking only: patients book a time for today, the day they are going.
+export const MAX_DAYS_AHEAD = 0
 
 // Serialises queue-number assignment for one department and day.
 export async function nextQueueNumber(db, departmentId, date) {
