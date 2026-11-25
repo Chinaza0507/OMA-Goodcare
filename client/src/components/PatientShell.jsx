@@ -41,7 +41,7 @@ export default function PatientShell({ children }) {
       <div aria-hidden="true" className="hidden lg:block lg:w-[84px] lg:shrink-0" />
       <aside onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}
         onFocus={() => setOpen(true)} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setOpen(false) }}
-        className={`hidden overflow-hidden bg-cream transition-[width,box-shadow] duration-200 ease-out motion-reduce:transition-none lg:fixed lg:left-0 lg:top-0 lg:z-30 lg:flex lg:h-screen lg:flex-col lg:border-r lg:border-line lg:py-7 ${small ? 'lg:w-[84px] lg:px-3' : 'lg:w-[232px] lg:px-5 lg:shadow-[12px_0_40px_rgba(34,18,28,0.12)]'}`}>
+        className={`hidden overflow-hidden bg-cream transition-[width,box-shadow] duration-200 ease-out motion-reduce:transition-none lg:fixed lg:inset-y-0 lg:left-0 lg:z-30 lg:flex lg:h-[100dvh] lg:min-h-full lg:flex-col lg:border-r lg:border-line lg:py-7 ${small ? 'lg:w-[84px] lg:px-3' : 'lg:w-[232px] lg:px-5 lg:shadow-[12px_0_40px_rgba(34,18,28,0.12)]'}`}>
         <div className={`flex h-10 items-center ${small ? 'justify-center' : ''}`}>
           <Brand small={small} />
         </div>

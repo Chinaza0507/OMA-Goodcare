@@ -24,7 +24,7 @@ const Chevron = () => (
 )
 
 function Row({ to, href, icon, label, sub, onClick, danger = false }) {
-  const cls = `flex min-h-14 w-full cursor-pointer items-center gap-3.5 border-0 bg-transparent px-1 text-left font-[inherit] text-[15px] font-semibold no-underline ${danger ? 'text-[#c8102e]' : 'text-ink'} ${danger ? 'hover:opacity-80' : 'hover:text-plum'}`
+  const cls = `flex min-h-14 w-full cursor-pointer items-center gap-3.5 bg-transparent px-1 text-left font-[inherit] text-[15px] font-semibold no-underline ${danger ? 'text-[#c8102e]' : 'text-ink'} ${danger ? 'hover:opacity-80' : 'hover:text-plum'}`
   const body = (<><span className={danger ? 'text-[#c8102e]' : 'text-plum'}><Svg d={ICON[icon]} /></span><span className="flex min-w-0 flex-1 flex-col">{label}{sub && <span className="truncate text-[13px] font-normal text-muted">{sub}</span>}</span>{!onClick && <Chevron />}</>)
   if (onClick) return <button type="button" onClick={onClick} className={cls}>{body}</button>
   if (href) return <a href={href} className={cls}>{body}</a>
