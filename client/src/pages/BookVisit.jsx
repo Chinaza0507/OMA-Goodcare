@@ -28,7 +28,26 @@ const dayParts = (iso) => {
 }
 // "Wed, Thu" from booking days (0 = Sunday … 6 = Saturday).
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-const daysLabel = (days) => (days.length === 7 ? 'Every day' : days.map((d) => DAY_NAMES[d]).join(', '))
+// Short, readable booking days: "Every day", "Mon–Sat", "Tue & Thu", "Wednesdays", "Mon, Wed & Fri".
+const LONG_DAYS = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays']
+function daysLabel(days) {
+  const d = [...days].sort((a, b) => a - b)
+  if (d.length === 7) return 'Every day'
+  if (d.length === 1) return LONG_DAYS[d[0]]
+  const runs = []
+  for (const x of d) {
+    const last = runs[runs.length - 1]
+    if (last && x === last[1] + 1) last[1] = x
+    else runs.push([x, x])
+  }
+  const parts = runs.flatMap(([a, b]) => (b - a >= 2 ? [`${DAY_NAMES[a]}–${DAY_NAMES[b]}`] : a === b ? [DAY_NAMES[a]] : [DAY_NAMES[a], DAY_NAMES[b]]))
+  return parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(', ')} & ${parts[parts.length - 1]}`
+}
+// "8am", "1:30pm"
+const shortClock = (hhmm) => {
+  const [h, m] = hhmm.split(':').map(Number)
+  return `${((h + 11) % 12) + 1}${m ? `:${String(m).padStart(2, '0')}` : ''}${h < 12 ? 'am' : 'pm'}`
+}
 
 function Stepper({ step, t }) {
   const labels = t('bookPage.steps')
@@ -188,9 +207,12 @@ export default function BookVisit() {
             {clinic.departments.length === 0 && <p className="step-in m-0 rounded-2xl border border-dashed border-line p-5 text-center text-sm text-muted">{t('bookPage.noServices')}</p>}
             {clinic.departments.map((d) => (
               <div key={d.id} className="step-in">
-                <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                <div className="mb-2.5">
                   <h3 className="m-0 text-sm font-bold uppercase tracking-[0.06em] text-muted">{d.name}</h3>
-                  <span className="text-xs font-semibold text-plum">{t('bookPage.bookingDays').replace('{days}', daysLabel(d.bookingDays)).replace('{from}', clock(d.opensAt)).replace('{to}', clock(d.closesAt))}</span>
+                  <span className="mt-0.5 flex items-center gap-1.5 text-[13px] text-muted">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM16 3v4M8 3v4M3 10h18" /></svg>
+                    {daysLabel(d.bookingDays)} · {shortClock(d.opensAt)}–{shortClock(d.closesAt)}
+                  </span>
                 </div>
                 <div className="grid gap-2.5 sm:grid-cols-2">
                   {d.services.map((sv) => (
