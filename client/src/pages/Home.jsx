@@ -84,6 +84,14 @@ function CountUp({ value, format = (n) => n }) {
 }
 
 // A short chime + vibration for the "turn is close" alert (where the device allows it).
+const ALERTED = 'oma_alerted'
+function readAlerted() {
+  try { return new Set(JSON.parse(localStorage.getItem(ALERTED) || '[]')) } catch { return new Set() }
+}
+function saveAlerted(set) {
+  try { localStorage.setItem(ALERTED, JSON.stringify([...set].slice(-50))) } catch { /* ignore */ }
+}
+
 function nudge() {
   // Browsers only allow vibration after the person has tapped the page.
   try { if (navigator.userActivation?.hasBeenActive) navigator.vibrate?.([200, 100, 200]) } catch { /* not supported */ }
@@ -114,6 +122,30 @@ function QueueProgress({ a, serving, t }) {
       </div>
       {ahead > 0 && <div className="mt-2 text-[13px] text-rose-tint">{fill(t('dash.aheadOfYou'), { n: ahead })}</div>}
     </div>
+  )
+}
+
+// Compact live card, used when more than one person in the family is in line today.
+function MiniTicket({ a, t, onDetails }) {
+  const q = a.queue
+  const called = a.status === 'called'
+  return (
+    <button type="button" onClick={onDetails} aria-label={`${a.patientName} · ${t('visit.title')}`}
+      className="dash-in flex w-full cursor-pointer items-center gap-4 rounded-[22px] border-0 bg-rose px-4 py-3.5 text-left font-[inherit] text-white shadow-[0_12px_28px_rgba(140,29,82,0.22)] hover:brightness-105 sm:px-5">
+      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/[0.18] font-display text-base font-bold">#{a.queueNumber}</span>
+      <span className="min-w-0 flex-1">
+        <b className="block truncate text-[16px]">{a.patientName} · {a.serviceName}</b>
+        <span className="block truncate text-[13px] text-rose-tint">
+          {called ? t('dash.yourTurn') : `${t('dash.estimated')} ${clock(q.estimatedFrom)}–${clock(q.estimatedTo)}`}
+        </span>
+      </span>
+      {!called && (
+        <span className="shrink-0 text-right">
+          <span className="block font-display text-2xl font-bold leading-none">{q.ahead === 0 ? t('dash.youreNext') : ordinal(q.ahead + 1)}</span>
+          {q.ahead > 0 && <span className="text-xs text-rose-tint">~{q.waitMinutes} {t('dash.min')}</span>}
+        </span>
+      )}
+    </button>
   )
 }
 
@@ -194,7 +226,7 @@ export default function Home() {
   const [data, setData] = useState(null) // { appts, kolo, family }
   const [error, setError] = useState(false)
   const scope = useRef(null)
-  const alerted = useRef(new Set())
+  const alerted = useRef(readAlerted())
   const [openVisit, setOpenVisit] = useState(null)
   const [toast, setToast] = useState('')
 
@@ -250,8 +282,12 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveKey])
   useEffect(() => {
-    if ((turnClose || live?.status === 'called') && !alerted.current.has(`${live.id}:${live.status}`)) {
-      alerted.current.add(`${live.id}:${live.status}`)
+    // Alert once when your turn gets close, and once more when you are called. Remembered on this
+    // device, so opening the dashboard again doesn't replay it.
+    const key = live && `${live.id}:${live.status === 'called' ? 'called' : 'close'}`
+    if ((turnClose || live?.status === 'called') && !alerted.current.has(key)) {
+      alerted.current.add(key)
+      saveAlerted(alerted.current)
       nudge()
       setRinging(true)
       setTimeout(() => setRinging(false), (getAlertSeconds() + 1) * 1000)
@@ -359,7 +395,9 @@ export default function Home() {
               {live ? (
                 <>
                   {lives.length > 1 && <h2 className="dash-in m-0 text-lg font-bold">{fill(t('dash.todayVisits'), { n: lives.length })}</h2>}
-                  {lives.map((a) => <Ticket key={a.id} a={a} serving={data.serving[a.departmentId] ?? null} t={t} onDetails={() => setOpenVisit(a)} />)}
+                  {lives.length === 1
+                    ? <Ticket a={lives[0]} serving={data.serving[lives[0].departmentId] ?? null} t={t} onDetails={() => setOpenVisit(lives[0])} />
+                    : lives.map((a) => <MiniTicket key={a.id} a={a} t={t} onDetails={() => setOpenVisit(a)} />)}
                 </>
               ) : (
                 <section className="dash-in rounded-[28px] border-[1.5px] border-dashed border-rose-line bg-white/60 px-6 py-8 text-center">
