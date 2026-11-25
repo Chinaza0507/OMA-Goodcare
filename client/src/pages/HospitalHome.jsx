@@ -144,7 +144,8 @@ export default function HospitalHome() {
     <HospitalShell>
       {!info && <div aria-hidden="true" className="h-64 animate-pulse rounded-[24px] bg-[#efe7ec]" />}
 
-      {info && info.departments.length === 0 && (
+      {info && info.departments.length === 0 && user.role === 'manager' && <Navigate to="/hospital/settings?welcome=1" replace />}
+      {info && info.departments.length === 0 && user.role !== 'manager' && (
         <div className="rounded-[24px] bg-white p-8 text-center ring-1 ring-line">
           <h1 className="m-0 text-2xl font-extrabold">Set up your first department</h1>
           <p className="mx-auto mb-0 mt-2 max-w-md text-muted">Add a department (like Dental), choose its booking days, and list its services with how long each takes. Then patients can book.</p>

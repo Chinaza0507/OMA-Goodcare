@@ -116,19 +116,21 @@ export function bookingDates(dept: Doc<'departments'>, today = todayLagos()) {
   return out
 }
 
-// Start times where a service of this length fits in the booking hours without overlapping
-// any booking already made (bookings never overlap: one doctor, one line).
+// Start times where a service of this length fits in the booking hours without overlapping any
+// booking already made (one doctor, one line). Times are offered every 30 minutes, plus the exact
+// moment each booking ends, so the next patient can start right after: braces 10:00–11:30 → 11:30.
 export function freeTimes(dept: Doc<'departments'>, minutes: number, date: string, booked: Doc<'appointments'>[]) {
   const busy = booked.filter((a) => a.status !== 'cancelled').map((a) => [toMinutes(a.time), toMinutes(a.time) + a.minutes])
+  const open = toMinutes(dept.opensAt)
   const close = toMinutes(dept.closesAt)
   const earliest = date === todayLagos() ? nowMinutesLagos() : 0
-  const out: string[] = []
-  for (let t = toMinutes(dept.opensAt); t + minutes <= close; t += STEP_MINUTES) {
-    if (t < earliest) continue
-    if (busy.some(([s, e]) => t < e && s < t + minutes)) continue
-    out.push(fromMinutes(t))
-  }
-  return out
+  const starts = new Set<number>()
+  for (let t = open; t < close; t += STEP_MINUTES) starts.add(t)
+  for (const [, end] of busy) if (end >= open) starts.add(end)
+  return [...starts]
+    .sort((x, y) => x - y)
+    .filter((t) => t >= earliest && t + minutes <= close && !busy.some(([s, e]) => t < e && s < t + minutes))
+    .map(fromMinutes)
 }
 
 export async function loadBookableService(ctx: QueryCtx, serviceId: Id<'services'>) {

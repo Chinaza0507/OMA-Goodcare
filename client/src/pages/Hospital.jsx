@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import Logo from '../components/Logo.jsx'
 import { ErrorLine, Field, PrimaryButton, TextInput } from '../components/fields.jsx'
-import { api } from '../api.js'
 import { getPosition } from '../lib/geo.js'
 import Hospital3D from '../components/Hospital3D.jsx'
 import { useAuth } from '../auth.jsx'
@@ -76,7 +75,7 @@ function HospitalLayout({ t, dark, children }) {
 export default function Hospital({ mode = 'register' }) {
   const t = tEn
   const lang = 'en'
-  const { user, workLogin } = useAuth()
+  const { user, workLogin, registerHospital } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const registered = mode === 'login' && location.state?.registered === true
@@ -128,17 +127,13 @@ export default function Hospital({ mode = 'register' }) {
         navigate(d.user.role === 'admin' ? '/admin' : d.user.role === 'patient' ? '/home' : '/hospital/home', { replace: true })
         return
       }
-      // Register, then send them to sign in with the account they just made.
-      await api('/hospitals/register', {
-        method: 'POST',
-        body: {
-          hospitalName: f.hospitalName.trim(), type: f.type, state: f.state.trim(), area: f.area.trim(),
-          address: f.address.trim(), landmark: f.landmark.trim() || undefined, email, password: f.password, language: lang,
-          ...(spot ? { latitude: spot.lat, longitude: spot.lng } : {}),
-        },
+      // Register and sign straight in, then go to setting up departments and services.
+      await registerHospital({
+        hospitalName: f.hospitalName.trim(), type: f.type, state: f.state.trim(), area: f.area.trim(),
+        address: f.address.trim(), landmark: f.landmark.trim() || undefined, email, password: f.password, language: lang,
+        ...(spot ? { latitude: spot.lat, longitude: spot.lng } : {}),
       })
-      // Registered: go to the log-in page with the email ready.
-      navigate('/hospital/login', { state: { registered: true, email } })
+      navigate('/hospital/settings?welcome=1', { replace: true })
     } catch (e2) {
       setErr(message(e2.code))
     } finally {

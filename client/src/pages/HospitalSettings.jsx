@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useSearchParams } from 'react-router-dom'
 import HospitalShell from '../components/HospitalShell.jsx'
 import { api } from '../api.js'
 import { useAuth } from '../auth.jsx'
@@ -34,7 +34,8 @@ function DaysAndHours({ value, onChange }) {
   return (
     <div className="flex flex-col gap-3">
       <div>
-        <span className="text-sm font-semibold">Booking days <span className="font-normal text-muted">· the days the doctor sees online bookings</span></span>
+        <span className="text-sm font-semibold">Which days does the specialist see online bookings?</span>
+        <span className="mt-0.5 block text-xs text-muted">Choose the days you agreed with them. Walk-ins use the other days, so the two queues never clash.</span>
         <div className="mt-1.5 flex flex-wrap gap-1.5">
           {DAYS.map((name, d) => (
             <button key={name} type="button" aria-pressed={value.bookingDays.includes(d)} onClick={() => toggle(d)}
@@ -43,8 +44,8 @@ function DaysAndHours({ value, onChange }) {
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <Label text="From"><input type="time" className={input} value={value.opensAt} onChange={(e) => onChange({ ...value, opensAt: e.target.value })} /></Label>
-        <Label text="To"><input type="time" className={input} value={value.closesAt} onChange={(e) => onChange({ ...value, closesAt: e.target.value })} /></Label>
+        <Label text="Online booking from"><input type="time" className={input} value={value.opensAt} onChange={(e) => onChange({ ...value, opensAt: e.target.value })} /></Label>
+        <Label text="Until"><input type="time" className={input} value={value.closesAt} onChange={(e) => onChange({ ...value, closesAt: e.target.value })} /></Label>
       </div>
     </div>
   )
@@ -76,11 +77,15 @@ export default function HospitalSettings() {
   const [busy, setBusy] = useState(null)
   const [toast, setToast] = useState(null)
   const isManager = user?.role === 'manager'
+  const [params] = useSearchParams()
+  const welcome = params.get('welcome') === '1'
 
   const flash = (ok, text) => { setToast({ ok, text }); setTimeout(() => setToast(null), 3500) }
   const load = useCallback(async () => {
     const d = await api('/manager/clinic')
     setData(d)
+    // Brand-new hospital: open the "add department" form straight away.
+    if (d.departments.length === 0) setNewDept((cur) => cur ?? { name: '', bookingDays: [], opensAt: '09:00', closesAt: '16:00' })
     setRules((r) => r ?? {
       name: d.clinic.name, state: d.clinic.state ?? '', area: d.clinic.area ?? '', address: d.clinic.address ?? '',
       graceMinutes: d.clinic.graceMinutes, cancelWindowMinutes: d.clinic.cancelWindowMinutes,
@@ -101,10 +106,22 @@ export default function HospitalSettings() {
   return (
     <HospitalShell>
       <div className="flex flex-col gap-5">
-        <div>
-          <h1 className="m-0 text-[28px] font-extrabold leading-tight">Settings</h1>
-          <p className="m-0 mt-1 text-sm text-muted">Set up what patients can book. Only the manager can change these.</p>
-        </div>
+        {welcome || data?.departments.length === 0 ? (
+          <div className="rounded-[24px] bg-[#2f1563] p-6 text-white">
+            <h1 className="m-0 text-[26px] font-extrabold leading-tight">Welcome{data ? `, ${data.clinic.name}` : ''}!</h1>
+            <p className="m-0 mt-1.5 text-[15px] text-[#e3d8fb]">Set up what patients can book online, in 3 steps:</p>
+            <ol className="m-0 mt-3 flex list-none flex-col gap-1.5 p-0 text-[15px] sm:flex-row sm:gap-6">
+              <li><b>1.</b> Add a department</li>
+              <li><b>2.</b> Pick its online booking days</li>
+              <li><b>3.</b> Add its services and times</li>
+            </ol>
+          </div>
+        ) : (
+          <div>
+            <h1 className="m-0 text-[28px] font-extrabold leading-tight">Settings</h1>
+            <p className="m-0 mt-1 text-sm text-muted">Set up what patients can book. Only the manager can change these.</p>
+          </div>
+        )}
 
         {!data && <div aria-hidden="true" className="h-64 animate-pulse rounded-[24px] bg-[#efe7ec]" />}
 
@@ -121,6 +138,7 @@ export default function HospitalSettings() {
                 <form className="flex flex-col gap-3 rounded-[22px] bg-white p-5 ring-1 ring-line" onSubmit={async (e) => {
                   e.preventDefault()
                   if (newDept.name.trim().length < 2) return flash(false, 'Please enter a department name.')
+                  if (newDept.bookingDays.length === 0) return flash(false, 'Pick at least one online booking day.')
                   if (await run('newDept', () => api('/manager/departments', { method: 'POST', body: { ...newDept, name: newDept.name.trim() } }), `${newDept.name.trim()} added. Now add its services.`)) setNewDept(null)
                 }}>
                   <Label text="Department name"><input className={input} value={newDept.name} onChange={(e) => setNewDept({ ...newDept, name: e.target.value })} placeholder="e.g. Dental, Eye clinic, GOPD" autoFocus /></Label>

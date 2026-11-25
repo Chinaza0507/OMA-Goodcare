@@ -21,6 +21,9 @@ const dayParts = (iso) => {
   }
 }
 const ALERTS = [1, 2, 3, 4, 5, 7, 10]
+// "Wed, Thu" from booking days (0 = Sunday … 6 = Saturday).
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const daysLabel = (days) => (days.length === 7 ? 'Every day' : days.map((d) => DAY_NAMES[d]).join(', '))
 
 function Stepper({ step, t }) {
   const labels = t('bookPage.steps')
@@ -168,7 +171,10 @@ export default function BookVisit() {
             {clinic.departments.length === 0 && <p className="step-in m-0 rounded-2xl border border-dashed border-line p-5 text-center text-sm text-muted">{t('bookPage.noServices')}</p>}
             {clinic.departments.map((d) => (
               <div key={d.id} className="step-in">
-                {clinic.departments.length > 1 && <h3 className="m-0 mb-2 text-sm font-bold uppercase tracking-[0.06em] text-muted">{d.name}</h3>}
+                <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                  <h3 className="m-0 text-sm font-bold uppercase tracking-[0.06em] text-muted">{d.name}</h3>
+                  <span className="text-xs font-semibold text-plum">{t('bookPage.bookingDays').replace('{days}', daysLabel(d.bookingDays)).replace('{from}', clock(d.opensAt)).replace('{to}', clock(d.closesAt))}</span>
+                </div>
                 <div className="grid gap-2.5 sm:grid-cols-2">
                   {d.services.map((sv) => (
                     <Choice key={sv.id} on={serviceId === sv.id} onClick={() => { setServiceId(sv.id); setError('') }} className="flex items-center justify-between gap-3 px-4 py-3.5">
@@ -193,7 +199,7 @@ export default function BookVisit() {
         {clinic && step === 1 && service && (
           <section className="flex flex-col gap-6 rounded-[24px] bg-white p-5 ring-1 ring-line sm:p-6">
             <div className="step-in flex items-center gap-3 rounded-2xl bg-plum-tint px-4 py-3">
-              <span className="min-w-0 flex-1"><b className="block truncate">{service.name}</b><span className="text-sm text-muted">{dept.name} · {t('bookPage.minutes').replace('{n}', service.minutes)}</span></span>
+              <span className="min-w-0 flex-1"><b className="block truncate">{service.name}</b><span className="text-sm text-muted">{dept.name} · {t('bookPage.minutes').replace('{n}', service.minutes)} · {daysLabel(dept.bookingDays)}</span></span>
               <button type="button" onClick={() => setStep(0)} className="cursor-pointer border-0 bg-transparent text-sm font-bold text-plum hover:underline">{t('bookPage.change')}</button>
             </div>
 

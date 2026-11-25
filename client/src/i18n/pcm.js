@@ -443,7 +443,7 @@ export default {
     noServices: 'This hospital never put their services for booking yet.',
     when: 'Choose day and time',
     whenHelp: 'You fit book reach 2 days before, for the days wey this department dey take booking.',
-    bookingDays: 'Dem dey take booking: {days}, {from}–{to}',
+    bookingDays: 'Online booking: {days} · {from}–{to}',
     noDays: 'No booking day for the next 2 days. Check back soon.',
     dayFull: 'E don full',
     change: 'Change am',
