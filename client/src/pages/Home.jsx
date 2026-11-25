@@ -1,5 +1,5 @@
 import { showLive, showNotification } from '../lib/notify.js'
-import { playAlert, stopAlert } from '../lib/sounds.js'
+import { getAlertSeconds, playAlert, stopAlert } from '../lib/sounds.js'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { connectSocket, pollEvery } from '../lib/socket.js'
@@ -86,7 +86,7 @@ function CountUp({ value, format = (n) => n }) {
 function nudge() {
   // Browsers only allow vibration after the person has tapped the page.
   try { if (navigator.userActivation?.hasBeenActive) navigator.vibrate?.([200, 100, 200]) } catch { /* not supported */ }
-  playAlert() // plays for 30 seconds; "Stop sound" on the banner ends it early
+  playAlert() // plays for the length chosen in Profile (30 seconds by default); "Stop sound" on the banner ends it early
 }
 
 // Progress along today's queue: from "Now serving" to your number.
@@ -255,7 +255,7 @@ export default function Home() {
       alerted.current.add(`${live.id}:${live.status}`)
       nudge()
       setRinging(true)
-      setTimeout(() => setRinging(false), 31_000)
+      setTimeout(() => setRinging(false), (getAlertSeconds() + 1) * 1000)
       if (live.status === 'called') showNotification(t('notif.yourTurn'), fill(t('notif.yourTurnBody'), { name: live.patientName }))
       else showNotification(t('notif.turnClose'), fill(t('notif.turnCloseBody'), { name: live.patientName, dept: live.departmentName }))
     }

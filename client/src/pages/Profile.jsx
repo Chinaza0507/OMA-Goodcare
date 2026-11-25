@@ -5,7 +5,7 @@ import { useAuth } from '../auth.jsx'
 import { SUPPORT_EMAIL, supportMailto } from '../lib/support.js'
 import { useT } from '../i18n/index.jsx'
 import { liveState, notifyState, setLive, setNotify } from '../lib/notify.js'
-import { TONES, getTone, playTone, setTone } from '../lib/sounds.js'
+import { ALERT_LENGTHS, TONES, getAlertSeconds, getTone, playTone, setAlertSeconds, setTone } from '../lib/sounds.js'
 import Avatar from '../components/Avatar.jsx'
 
 const ICON = {
@@ -43,6 +43,8 @@ function NotifySection({ t }) {
   const [state, setState] = useState(notifyState)
   const [tone, setToneState] = useState(getTone)
   const [live, setLiveState] = useState(liveState)
+  const [secs, setSecs] = useState(getAlertSeconds)
+  const lengthLabel = (n) => (n < 60 ? t('profile.secs').replace('{n}', n) : t('profile.mins').replace('{n}', n / 60))
   const on = state === 'on'
   const sub = state === 'blocked' ? t('profile.notifyBlocked') : state === 'unsupported' ? t('profile.notifyUnsupported') : null
   return (
@@ -64,6 +66,15 @@ function NotifySection({ t }) {
             ))}
           </div>
           <span className="mt-1.5 block text-xs text-muted">{t('profile.toneHelp')}</span>
+        </div>
+        <div>
+          <span className="text-sm font-semibold">{t('profile.playFor')}</span>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {ALERT_LENGTHS.map((n) => (
+              <button key={n} type="button" aria-pressed={secs === n} onClick={() => { setAlertSeconds(n); setSecs(n) }}
+                className={`min-h-10 min-w-[72px] cursor-pointer rounded-xl border-[1.5px] px-3 text-sm font-semibold ${secs === n ? 'border-plum bg-plum text-white' : 'border-line bg-white text-ink hover:border-plum-soft'}`}>{lengthLabel(n)}</button>
+            ))}
+          </div>
         </div>
         <button type="button" role="switch" aria-checked={on} disabled={state === 'unsupported'} onClick={async () => setState(await setNotify(!on))}
           className="flex cursor-pointer items-center gap-3 border-0 bg-transparent p-0 text-left font-[inherit] text-ink disabled:cursor-not-allowed">

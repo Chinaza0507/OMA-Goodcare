@@ -117,7 +117,12 @@ export function playTone(name = getTone()) {
 
 // The real alert: repeat the chosen tone for 30 seconds (or until stopped).
 let stopCurrent = null
-export function playAlert(name = getTone(), seconds = 30) {
+export const ALERT_LENGTHS = [10, 30, 60, 120]
+const SECS = 'oma_tone_secs'
+export const getAlertSeconds = () => { try { const n = Number(localStorage.getItem(SECS)); return ALERT_LENGTHS.includes(n) ? n : 30 } catch { return 30 } }
+export const setAlertSeconds = (n) => { try { localStorage.setItem(SECS, String(n)) } catch { /* ignore */ } }
+
+export function playAlert(name = getTone(), seconds = getAlertSeconds()) {
   stopAlert()
   let ctx
   try { ctx = new (window.AudioContext || window.webkitAudioContext)() } catch { return }
