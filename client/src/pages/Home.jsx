@@ -43,13 +43,11 @@ function TodayClock() {
     const first = setTimeout(() => { setNow(new Date()); id = setInterval(() => setNow(new Date()), 60_000) }, 60_000 - (Date.now() % 60_000))
     return () => { clearTimeout(first); clearInterval(id) }
   }, [])
-  const date = new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: LAGOS }).format(now)
+  const date = new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: LAGOS }).format(now)
   const time = new Intl.DateTimeFormat('en-GB', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: LAGOS }).format(now).replace(' ', '\u00a0')
   return (
-    <p className="m-0 mt-1.5 flex flex-wrap items-center gap-x-2 text-[14px] font-medium text-muted">
-      <span>{date}</span>
-      <span aria-hidden="true" className="h-1 w-1 rounded-full bg-[#cdb9c6]" />
-      <time dateTime={now.toISOString()} className="font-semibold text-ink">{time}</time>
+    <p className="m-0 mt-1 text-sm text-muted">
+      {date} · <time dateTime={now.toISOString()}>{time}</time>
     </p>
   )
 }
@@ -318,9 +316,8 @@ export default function Home() {
     <PatientShell>
       <div ref={scope} className="flex flex-col gap-6">
         <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="m-0 text-[15px] text-muted">{greeting}</p>
-            <h1 className="m-0 mt-0.5 text-[30px] font-extrabold leading-tight sm:text-[34px]">{user.name.split(' ')[0]}</h1>
+          <div className="min-w-0">
+            <h1 className="m-0 text-[24px] font-semibold leading-tight sm:text-[28px]">{greeting} {user.name.split(' ')[0]}</h1>
             <TodayClock />
           </div>
           <NotificationsBell items={notifications} t={t} />
