@@ -322,7 +322,19 @@ export default function Home() {
             </span>
             <span className="flex-1"><b className="block text-[16px]">{t('dash.turnClose')}</b><span className="text-sm text-ink">{t('dash.turnCloseBody')}</span></span>
             {ringing && (
-              <button type="button" onClick={() => { stopAlert(); setRinging(false) }} className="min-h-10 shrink-0 cursor-pointer rounded-xl border-0 bg-rose px-3.5 text-sm font-bold text-white hover:bg-rose-dark">{t('dash.stopSound')}</button>
+              <button type="button" onClick={() => { stopAlert(); setRinging(false) }} aria-label={t('dash.stopSound')} title={t('dash.stopSound')}
+                className="flex min-h-12 shrink-0 cursor-pointer items-center gap-2 rounded-2xl border-0 bg-[#c8102e] px-3.5 text-sm font-bold text-white shadow-[0_8px_18px_rgba(200,16,46,0.35)] hover:bg-[#a00c24]">
+                {/* talking drum (hourglass body with cords) */}
+                <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true" className="motion-safe:animate-pulse">
+                  <path d="M7 4h18l-6 12 6 12H7l6-12z" fill="#fde3ef" stroke="#fff" strokeWidth="1.6" strokeLinejoin="round" />
+                  <path d="M10 6l6 10M22 6l-6 10M10 26l6-10M22 26l-6 10" stroke="#8c1d52" strokeWidth="1.1" />
+                  <ellipse cx="16" cy="4.5" rx="9" ry="1.8" fill="#fff" />
+                  <ellipse cx="16" cy="27.5" rx="9" ry="1.8" fill="#fff" />
+                </svg>
+                {/* pause */}
+                <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x="2" y="1" width="3.5" height="12" rx="1" fill="#fff" /><rect x="8.5" y="1" width="3.5" height="12" rx="1" fill="#fff" /></svg>
+                <span>{t('dash.stopSound')}</span>
+              </button>
             )}
           </div>
         )}
