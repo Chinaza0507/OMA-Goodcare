@@ -8,6 +8,7 @@ import { api } from '../api.js'
 import { cachedPosition } from '../lib/geo.js'
 import { useLocationAsk, permissionState } from '../components/LocationAsk.jsx'
 import { useAuth } from '../auth.jsx'
+import { COMMON_SERVICES, LAGOS_AREAS, sameService } from '../lib/catalog.js'
 import { useT } from '../i18n/index.jsx'
 
 gsap.registerPlugin(useGSAP)
@@ -15,6 +16,22 @@ gsap.registerPlugin(useGSAP)
 const PinIcon = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z" /><circle cx="12" cy="9.5" r="2.5" /></svg>
 )
+
+// Dropdown with its own arrow, spaced away from the edge.
+function Select({ label, value, onChange, options, any }) {
+  return (
+    <label className="relative block">
+      <span className="sr-only">{label}</span>
+      <select value={value} onChange={(e) => onChange(e.target.value)}
+        className="min-h-12 w-full cursor-pointer appearance-none rounded-[14px] border-[1.5px] border-line bg-white pl-3.5 pr-10 text-[15px] text-ink">
+        <option value="">{any}</option>
+        {options.map((o) => <option key={o} value={o}>{o}</option>)}
+      </select>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+        className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-muted"><path d="m6 9 6 6 6-6" /></svg>
+    </label>
+  )
+}
 
 // "Book": find a hospital — nearest first with the patient's location, or by search / state / area.
 export default function FindHospital() {
@@ -25,7 +42,7 @@ export default function FindHospital() {
   const [clinics, setClinics] = useState(null)
   const [places, setPlaces] = useState([])
   const [q, setQ] = useState('')
-  const [state, setState] = useState('')
+  const state = '' // Lagos only for now
   const [area, setArea] = useState('')
   const [service, setService] = useState('')
   const [error, setError] = useState(false)
@@ -54,14 +71,13 @@ export default function FindHospital() {
   }, [pos])
   const locOff = !pos && (locState === 'blocked' || locState === 'insecure')
 
-  const states = useMemo(() => [...new Set(places.map((p) => p.state))], [places])
-  const areas = useMemo(() => places.filter((p) => !state || p.state === state).map((p) => p.area).filter(Boolean), [places, state])
+  const areas = useMemo(() => [...new Set([...LAGOS_AREAS, ...places.map((p) => p.area).filter(Boolean)])].sort((a, b) => a.localeCompare(b)), [places])
   // Every service offered by the hospitals in the list, for the "Any service" dropdown.
-  const services = useMemo(() => [...new Set((clinics ?? []).flatMap((c) => c.departments.flatMap((d) => d.services.map((sv) => sv.name))))]
+  const services = useMemo(() => [...new Set([...COMMON_SERVICES, ...(clinics ?? []).flatMap((c) => c.departments.flatMap((d) => d.services.map((sv) => sv.name)))])]
     .sort((a, b) => a.localeCompare(b)), [clinics])
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase()
-    const offers = (c) => !service || c.departments.some((d) => d.services.some((sv) => sv.name === service))
+    const offers = (c) => !service || c.departments.some((d) => d.services.some((sv) => sameService(sv.name, service)))
     if (!clinics) return clinics
     if (!needle) return clinics.filter(offers)
     // Search by hospital, place, or what you need (e.g. "braces", "eye test").
@@ -86,7 +102,6 @@ export default function FindHospital() {
   if (checking) return null
   if (!user) return <Navigate to="/login" replace />
 
-  const select = 'min-h-12 w-full cursor-pointer rounded-[14px] border-[1.5px] border-line bg-white px-3 text-[15px] text-ink'
 
   return (
     <PatientShell>
@@ -109,28 +124,9 @@ export default function FindHospital() {
                 className="min-h-12 w-full rounded-[14px] border-[1.5px] border-line bg-white pl-10 pr-3 text-base text-ink" />
             </label>
           </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:max-w-2xl">
-            <label className="col-span-2 sm:col-span-1">
-              <span className="sr-only">{t('find.service')}</span>
-              <select value={service} onChange={(e) => setService(e.target.value)} className={select}>
-                <option value="">{t('find.anyService')}</option>
-                {services.map((sv) => <option key={sv} value={sv}>{sv}</option>)}
-              </select>
-            </label>
-            <label>
-              <span className="sr-only">{t('find.state')}</span>
-              <select value={state} onChange={(e) => { setState(e.target.value); setArea('') }} className={select}>
-                <option value="">{t('find.anyState')}</option>
-                {states.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </label>
-            <label>
-              <span className="sr-only">{t('find.area')}</span>
-              <select value={area} onChange={(e) => setArea(e.target.value)} className={select}>
-                <option value="">{t('find.anyArea')}</option>
-                {areas.map((a) => <option key={a} value={a}>{a}</option>)}
-              </select>
-            </label>
+          <div className="grid grid-cols-2 gap-3 lg:max-w-xl">
+            <Select label={t('find.service')} value={service} onChange={setService} options={services} any={t('find.anyService')} />
+            <Select label={t('find.area')} value={area} onChange={setArea} options={areas} any={t('find.anyArea')} />
           </div>
           {locState === 'unavailable' && <p role="alert" className="m-0 text-sm text-rose">{t('find.why.unavailable')}</p>}
           {locOff && <p className="m-0 text-sm text-muted">{t('find.offNote')}</p>}

@@ -5,6 +5,7 @@ import { ErrorLine, Field, PrimaryButton, TextInput } from '../components/fields
 import { getPosition } from '../lib/geo.js'
 import Hospital3D from '../components/Hospital3D.jsx'
 import { useAuth } from '../auth.jsx'
+import { LAGOS_AREAS, STATE } from '../lib/catalog.js'
 import en from '../i18n/en.js'
 
 // Hospital pages are always English for now; hospitals change language in settings after logging in.
@@ -80,7 +81,7 @@ export default function Hospital({ mode = 'register' }) {
   const location = useLocation()
   const registered = mode === 'login' && location.state?.registered === true
   const [step, setStep] = useState(1)
-  const [f, setF] = useState({ hospitalName: '', type: 'private', state: '', area: '', address: '', landmark: '', email: location.state?.email ?? '', password: '', confirm: '' })
+  const [f, setF] = useState({ hospitalName: '', type: 'private', state: STATE, area: '', address: '', landmark: '', email: location.state?.email ?? '', password: '', confirm: '' })
   const [spot, setSpot] = useState(null) // { lat, lng } when the hospital shares its location
   const [spotState, setSpotState] = useState('idle') // idle | locating | failed
   const [tried, setTried] = useState(false)
@@ -187,14 +188,28 @@ export default function Hospital({ mode = 'register' }) {
           <TextInput id="h-name" autoComplete="organization" value={f.hospitalName} onChange={(e) => set('hospitalName')(e.target.value)} placeholder={t('hospital.hospitalNamePh')} ok={ok.name} />
         </Field>
         <Field id="h-type" label={t('hospital.type')}>
-          <select id="h-type" value={f.type} onChange={(e) => set('type')(e.target.value)}
-            className="min-h-[52px] w-full cursor-pointer rounded-[14px] border-[1.5px] border-plum bg-white px-3.5 text-base text-ink">
-            {TYPES.map((ty) => <option key={ty} value={ty}>{t(`hospital.types.${ty}`)}</option>)}
-          </select>
+          <span className="relative block">
+            <select id="h-type" value={f.type} onChange={(e) => set('type')(e.target.value)}
+              className="min-h-[52px] w-full cursor-pointer appearance-none rounded-[14px] border-[1.5px] border-plum bg-white pl-3.5 pr-10 text-base text-ink">
+              {TYPES.map((ty) => <option key={ty} value={ty}>{t(`hospital.types.${ty}`)}</option>)}
+            </select>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+              className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-muted"><path d="m6 9 6 6 6-6" /></svg>
+          </span>
         </Field>
         <div className="grid grid-cols-2 gap-2.5">
-          <Field id="h-state" label={t('hospital.state')}><TextInput id="h-state" value={f.state} onChange={(e) => set('state')(e.target.value)} placeholder={t('hospital.statePh')} ok={ok.state} /></Field>
-          <Field id="h-area" label={t('hospital.area')}><TextInput id="h-area" value={f.area} onChange={(e) => set('area')(e.target.value)} placeholder={t('hospital.areaPh')} ok={ok.area} /></Field>
+          <Field id="h-state" label={t('hospital.state')}><TextInput id="h-state" value={STATE} readOnly aria-readonly="true" ok /></Field>
+          <Field id="h-area" label={t('hospital.area')}>
+            <span className="relative block">
+              <select id="h-area" value={f.area} onChange={(e) => set('area')(e.target.value)}
+                className={`min-h-[52px] w-full cursor-pointer appearance-none rounded-[14px] border-[1.5px] bg-white pl-3.5 pr-10 text-base text-ink ${ok.area ? 'border-plum' : 'border-line'}`}>
+                <option value="">{t('hospital.areaPick')}</option>
+                {LAGOS_AREAS.map((a) => <option key={a} value={a}>{a}</option>)}
+              </select>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+                className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 text-muted"><path d="m6 9 6 6 6-6" /></svg>
+            </span>
+          </Field>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
         <Field id="h-address" label={t('hospital.address')}>

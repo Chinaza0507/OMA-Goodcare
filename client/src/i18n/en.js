@@ -197,6 +197,7 @@ export default {
     state: 'State',
     statePh: 'e.g. Lagos',
     area: 'Area',
+    areaPick: 'Choose your area',
     areaPh: 'e.g. Yaba',
     address: 'Address',
     addressPh: 'Street name and number',

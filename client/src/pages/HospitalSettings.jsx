@@ -3,6 +3,7 @@ import { Navigate, useSearchParams } from 'react-router-dom'
 import HospitalShell from '../components/HospitalShell.jsx'
 import { api } from '../api.js'
 import { useAuth } from '../auth.jsx'
+import { COMMON_SERVICES } from '../lib/catalog.js'
 
 const input = 'min-h-11 w-full rounded-[12px] border-[1.5px] border-line bg-white px-3 text-[15px] text-ink'
 const pink = 'min-h-11 cursor-pointer rounded-xl border-0 bg-rose px-5 text-sm font-bold text-white hover:bg-rose-dark disabled:cursor-wait disabled:opacity-60'
@@ -54,7 +55,8 @@ function DaysAndHours({ value, onChange }) {
 function ServiceForm({ value, onChange, onSubmit, onCancel, busy, submitText }) {
   return (
     <form className="grid gap-2.5 sm:grid-cols-[1fr_110px_140px_auto]" onSubmit={(e) => { e.preventDefault(); onSubmit() }}>
-      <input className={input} value={value.name} onChange={(e) => onChange({ ...value, name: e.target.value })} placeholder="Service, e.g. Teeth cleaning" aria-label="Service name" />
+      <input className={input} list="oma-services" value={value.name} onChange={(e) => onChange({ ...value, name: e.target.value })} placeholder="Service, e.g. Teeth cleaning" aria-label="Service name" />
+      <datalist id="oma-services">{COMMON_SERVICES.map((sv) => <option key={sv} value={sv} />)}</datalist>
       <input className={input} type="number" min="5" max="480" value={value.minutes} onChange={(e) => onChange({ ...value, minutes: e.target.value })} aria-label="Minutes it takes" title="Minutes it takes" />
       <input className={input} inputMode="numeric" value={value.price} onChange={(e) => onChange({ ...value, price: e.target.value.replace(/\D/g, '') })} placeholder="Price (optional)" aria-label="Price in naira" />
       <span className="flex gap-2">
