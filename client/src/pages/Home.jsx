@@ -1,3 +1,4 @@
+import { showNotification } from '../lib/notify.js'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { connectSocket, pollEvery } from '../lib/socket.js'
@@ -255,8 +256,10 @@ export default function Home() {
     if ((turnClose || live?.status === 'called') && !alerted.current.has(`${live.id}:${live.status}`)) {
       alerted.current.add(`${live.id}:${live.status}`)
       nudge()
+      if (live.status === 'called') showNotification(t('notif.yourTurn'), fill(t('notif.yourTurnBody'), { name: live.patientName }))
+      else showNotification(t('notif.turnClose'), fill(t('notif.turnCloseBody'), { name: live.patientName, dept: live.departmentName }))
     }
-  }, [turnClose, live])
+  }, [turnClose, live, t])
 
   useGSAP(() => {
     // Skip when the tab is in the background (browsers pause animations there) so nothing stays hidden.
