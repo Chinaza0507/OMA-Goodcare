@@ -13,7 +13,7 @@ export function setAlertMode(v) { try { localStorage.setItem(KEY, JSON.stringify
 
 // Is it time to alert for this live visit?
 export function isTurnClose(visit) {
-  if (!visit?.queue || visit.status === 'called') return false
+  if (!visit?.queue || visit.status === 'called' || visit.queue.missed) return false
   const pref = getAlertMode()
   return pref.mode === 'minutes' ? visit.queue.waitMinutes <= pref.minutes : visit.queue.alertNow
 }

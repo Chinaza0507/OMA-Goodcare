@@ -90,7 +90,10 @@ export async function queueInfo(ctx: QueryCtx, appt: Doc<'appointments'>) {
     cursor = start + a.minutes
   }
   if (appt.status === 'called') start = now
-  const delayMinutes = Math.max(0, start - toMinutes(appt.time))
+  // Booked but never arrived, 10+ minutes past their time: they missed it. The desk can put them
+  // back in line when they turn up; until then, no "doctor running late" message.
+  const missed = appt.status === 'booked' && toMinutes(appt.time) + LATE_AFTER <= now
+  const delayMinutes = missed ? 0 : Math.max(0, start - toMinutes(appt.time))
   return {
     ahead: Math.max(0, ahead),
     waitMinutes: Math.max(0, start - now),
@@ -98,7 +101,8 @@ export async function queueInfo(ctx: QueryCtx, appt: Doc<'appointments'>) {
     averageVisitMinutes: appt.minutes,
     estimatedFrom: fromMinutes(Math.min(start, 1439)),
     estimatedTo: fromMinutes(Math.min(start + appt.minutes, 1439)),
-    alertNow: ahead <= appt.alertAhead,
+    alertNow: !missed && ahead <= appt.alertAhead,
+    missed,
   }
 }
 

@@ -123,7 +123,30 @@ function QueueProgress({ a, serving, t, compact = false }) {
   )
 }
 
-function Ticket({ a, serving, t, onDetails, compact = false }) {
+// Small talking drum on the card of the person whose turn is close (or who is being called).
+// While the alert sound is playing, tap it to stop.
+function TurnDrum({ ringing, onStop, t }) {
+  const drum = (
+    <svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true">
+      <path d="M7 4h18l-6 12 6 12H7l6-12z" fill="#fde3ef" stroke="#fff" strokeWidth="1.6" strokeLinejoin="round" />
+      <path d="M10 6l6 10M22 6l-6 10M10 26l6-10M22 26l-6 10" stroke="#8c1d52" strokeWidth="1.1" />
+      <ellipse cx="16" cy="4.5" rx="9" ry="1.8" fill="#fff" />
+      <ellipse cx="16" cy="27.5" rx="9" ry="1.8" fill="#fff" />
+    </svg>
+  )
+  if (ringing) {
+    return (
+      <button type="button" onClick={onStop} aria-label={t('dash.stopSound')} title={t('dash.stopSound')}
+        className="flex h-9 cursor-pointer items-center gap-1.5 rounded-full border-0 bg-[#c8102e] px-2.5 text-white shadow-[0_6px_14px_rgba(200,16,46,0.4)] hover:bg-[#a00c24]">
+        <span className="motion-safe:animate-pulse">{drum}</span>
+        <svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true"><rect x="2" y="1" width="3.5" height="12" rx="1" fill="#fff" /><rect x="8.5" y="1" width="3.5" height="12" rx="1" fill="#fff" /></svg>
+      </button>
+    )
+  }
+  return <span title={t('dash.turnClose')} aria-label={t('dash.turnClose')} className="flex h-9 w-9 items-center justify-center rounded-full bg-white/[0.18]">{drum}</span>
+}
+
+function Ticket({ a, serving, t, onDetails, compact = false, close = false, ringing = false, onStop }) {
   const q = a.queue
   const called = a.status === 'called'
   const checkedIn = a.status === 'checked_in'
@@ -140,7 +163,10 @@ function Ticket({ a, serving, t, onDetails, compact = false }) {
           </span>
           {t('dash.liveQueue')}
         </span>
-        <span className="rounded-full bg-white/[0.18] px-3 py-1 font-display text-sm font-bold">#{a.queueNumber}</span>
+        <span className="flex items-center gap-2">
+          {(close || called) && <TurnDrum ringing={ringing} onStop={onStop} t={t} />}
+          <span className="rounded-full bg-white/[0.18] px-3 py-1 font-display text-sm font-bold">#{a.queueNumber}</span>
+        </span>
       </div>
 
       <div className={`relative ${compact ? 'mt-3' : 'mt-4'}`}>
@@ -148,7 +174,12 @@ function Ticket({ a, serving, t, onDetails, compact = false }) {
         <div className="mt-0.5 truncate text-sm text-rose-tint">{a.departmentName}, {a.clinicName}</div>
       </div>
 
-      {called ? (
+      {q?.missed && !called ? (
+        <div className={`relative ${compact ? 'mt-4' : 'mt-6'} rounded-2xl bg-white/[0.14] px-4 py-3`}>
+          <b className="block text-lg">{t('dash.missedTitle')}</b>
+          <span className="text-sm text-rose-tint">{t('dash.missedBody')}</span>
+        </div>
+      ) : called ? (
         <div className="relative mt-6">
           <div className="font-display text-4xl font-extrabold leading-tight sm:text-5xl">{t('dash.yourTurn')}</div>
           <div className="mt-2 text-base text-rose-tint">{t('dash.yourTurnBody')}</div>
@@ -172,15 +203,15 @@ function Ticket({ a, serving, t, onDetails, compact = false }) {
         </div>
       )}
 
-      {!called && <QueueProgress a={a} serving={serving} t={t} compact={compact} />}
+      {!called && !q.missed && <QueueProgress a={a} serving={serving} t={t} compact={compact} />}
 
-      {!called && q.delayMinutes >= 10 && (
+      {!called && !q.missed && q.delayMinutes >= 10 && (
         <div role="status" className="relative mt-4 rounded-2xl bg-white/[0.14] px-4 py-3 text-[15px]">
           {fill(t('dash.runningLate'), { n: q.delayMinutes, time: clock(q.estimatedFrom) })}
         </div>
       )}
 
-      {!called && (
+      {!called && !q.missed && (
         <div className={`relative flex flex-wrap items-center justify-between gap-2.5 rounded-2xl bg-white px-4 text-plum-deep ${compact ? 'mt-4 py-2.5' : 'mt-6 py-3'}`}>
           <span className={`font-semibold ${compact ? 'text-sm' : 'text-[15px]'}`}>{t('dash.estimated')} <span className="whitespace-nowrap font-bold">{clock(q.estimatedFrom)}–{clock(q.estimatedTo)}</span></span>
           {checkedIn && <span className="rounded-full bg-[#e9f7ee] px-3 py-1 text-xs font-bold text-[#1d6b3a]">{t('dash.checkedIn')}</span>}
@@ -245,7 +276,7 @@ export default function Home() {
   }, [liveDepts, load])
 
   useEffect(() => () => stopAlert(), [])
-  const [ringing, setRinging] = useState(false)
+  const [ringing, setRinging] = useState(null) // id of the visit whose alert is playing
   const turnClose = isTurnClose(live)
   // Live queue updates (if turned on in Profile): keep one notification showing your place.
   const liveKey = live ? `${live.status}:${live.queue.ahead}:${live.queue.estimatedFrom}` : ''
@@ -255,20 +286,29 @@ export default function Home() {
       : fill(t('notif.liveBody'), { n: live.queue.ahead, time: clock(live.queue.estimatedFrom) }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveKey])
+  // Sound once when a person's turn gets close, and once more when they are called — but only
+  // when it happens while the app is open. Opening or reloading the dashboard never plays it.
+  const firstCheck = useRef(true)
   useEffect(() => {
-    // Alert once when your turn gets close, and once more when you are called. Remembered on this
-    // device, so opening the dashboard again doesn't replay it.
-    const key = live && `${live.id}:${live.status === 'called' ? 'called' : 'close'}`
-    if ((turnClose || live?.status === 'called') && !alerted.current.has(key)) {
+    if (!data) return
+    for (const v of lives) {
+      const kind = v.status === 'called' ? 'called' : isTurnClose(v) ? 'close' : null
+      if (!kind) continue
+      const key = `${v.id}:${kind}`
+      if (alerted.current.has(key)) continue
       alerted.current.add(key)
       saveAlerted(alerted.current)
+      if (firstCheck.current) continue // already close when the page opened: show the drum, stay quiet
       nudge()
-      setRinging(true)
-      setTimeout(() => setRinging(false), (getAlertSeconds() + 1) * 1000)
-      if (live.status === 'called') showNotification(t('notif.yourTurn'), fill(t('notif.yourTurnBody'), { name: live.patientName }))
-      else showNotification(t('notif.turnClose'), fill(t('notif.turnCloseBody'), { name: live.patientName, dept: live.departmentName }))
+      setRinging(v.id)
+      setTimeout(() => setRinging((r) => (r === v.id ? null : r)), (getAlertSeconds() + 1) * 1000)
+      if (kind === 'called') showNotification(t('notif.yourTurn'), fill(t('notif.yourTurnBody'), { name: v.patientName }))
+      else showNotification(t('notif.turnClose'), fill(t('notif.turnCloseBody'), { name: v.patientName, dept: v.departmentName }))
     }
-  }, [turnClose, live, t])
+    firstCheck.current = false
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data])
+  const stopRinging = () => { stopAlert(); setRinging(null) }
 
   useGSAP(() => {
     // Skip when the tab is in the background (browsers pause animations there) so nothing stays hidden.
@@ -323,30 +363,6 @@ export default function Home() {
           <NotificationsBell items={notifications} t={t} />
         </div>
 
-        {turnClose && (
-          <div role="alert" className="dash-in flex items-center gap-3 rounded-2xl border border-rose-line bg-blush px-4 py-3.5 text-rose">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rose text-white">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10 21a2 2 0 0 0 4 0" /></svg>
-            </span>
-            <span className="flex-1"><b className="block text-[16px]">{t('dash.turnClose')}</b><span className="text-sm text-ink">{t('dash.turnCloseBody')}</span></span>
-            {ringing && (
-              <button type="button" onClick={() => { stopAlert(); setRinging(false) }} aria-label={t('dash.stopSound')} title={t('dash.stopSound')}
-                className="flex min-h-12 shrink-0 cursor-pointer items-center gap-2 rounded-2xl border-0 bg-[#c8102e] px-3.5 text-sm font-bold text-white shadow-[0_8px_18px_rgba(200,16,46,0.35)] hover:bg-[#a00c24]">
-                {/* talking drum (hourglass body with cords) */}
-                <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true" className="motion-safe:animate-pulse">
-                  <path d="M7 4h18l-6 12 6 12H7l6-12z" fill="#fde3ef" stroke="#fff" strokeWidth="1.6" strokeLinejoin="round" />
-                  <path d="M10 6l6 10M22 6l-6 10M10 26l6-10M22 26l-6 10" stroke="#8c1d52" strokeWidth="1.1" />
-                  <ellipse cx="16" cy="4.5" rx="9" ry="1.8" fill="#fff" />
-                  <ellipse cx="16" cy="27.5" rx="9" ry="1.8" fill="#fff" />
-                </svg>
-                {/* pause */}
-                <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><rect x="2" y="1" width="3.5" height="12" rx="1" fill="#fff" /><rect x="8.5" y="1" width="3.5" height="12" rx="1" fill="#fff" /></svg>
-                <span>{t('dash.stopSound')}</span>
-              </button>
-            )}
-          </div>
-        )}
-
         {error && !data && (
           <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-white px-5 py-4">
             <span className="text-[15px] text-muted">{t('dash.loadError')}</span>
@@ -369,10 +385,12 @@ export default function Home() {
                 <>
                   {lives.length > 1 && <h2 className="dash-in m-0 text-lg font-bold">{fill(t('dash.todayVisits'), { n: lives.length })}</h2>}
                   {lives.length === 1
-                    ? <Ticket a={lives[0]} serving={data.serving[lives[0].departmentId] ?? null} t={t} onDetails={() => setOpenVisit(lives[0])} />
+                    ? <Ticket a={lives[0]} serving={data.serving[lives[0].departmentId] ?? null} t={t} onDetails={() => setOpenVisit(lives[0])}
+                        close={isTurnClose(lives[0])} ringing={ringing === lives[0].id} onStop={stopRinging} />
                     : (
                       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                        {lives.map((a) => <Ticket key={a.id} compact a={a} serving={data.serving[a.departmentId] ?? null} t={t} onDetails={() => setOpenVisit(a)} />)}
+                        {lives.map((a) => <Ticket key={a.id} compact a={a} serving={data.serving[a.departmentId] ?? null} t={t} onDetails={() => setOpenVisit(a)}
+                          close={isTurnClose(a)} ringing={ringing === a.id} onStop={stopRinging} />)}
                       </div>
                     )}
                 </>

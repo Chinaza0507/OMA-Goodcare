@@ -95,6 +95,8 @@ export default {
   home: { hello: 'Hello', soon: 'Your dashboard dey come soon.', logout: 'Log out' },
   menu: { home: 'Home', book: 'Book', kolo: 'Kolo', family: 'Family', account: 'Profile', main: 'Main menu', settings: 'Settings', collapse: 'Make menu small', expand: 'Open menu wide' },
   dash: {
+    missedTitle: 'Your booked time don pass',
+    missedBody: 'Go meet front desk when you reach. Dem fit put you back for line.',
     todayVisits: 'Today · {n} visits',
     stopSound: 'Stop the sound',
     runningLate: 'Doctor dey late reach {n} min. Your time don move go {time}.',
