@@ -466,6 +466,7 @@ export default {
     noServices: 'This hospital never put their services for booking yet.',
     when: 'Choose day and time',
     whenHelp: 'You fit book reach 2 days before, for the days wey this department dey take booking.',
+    bookingDaysLabel: 'Booking days:',
     bookingDays: 'Online booking: {days} · {from}–{to}',
     noDays: 'No booking day for the next 2 days. Check back soon.',
     blocks: '{service} dey take around {n} min. Time go shift if person before you need more time.',
