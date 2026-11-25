@@ -104,14 +104,18 @@ describe('services and booking days', () => {
     expect(after).not.toContain('12:00')
     expect(after).not.toContain('12:30')
     expect(after).toContain('13:00')
-    // A 75-minute booking from 14:00 ends at 15:15: that exact time is offered next.
+    // A 75-minute service is offered in 75-minute blocks from opening (8:00, 9:15, 10:30, …, 14:15).
+    // Booked 14:15–15:30: the next cleaning block offered starts exactly at 15:30.
     await t.mutation(api.hospital.addService, { token: desk, departmentId: deptId, name: 'Long braces', minutes: 75, price: null })
     const long = (await t.query(api.hospital.managerClinic, { token: desk })).departments[0].services.find((x) => x.name === 'Long braces')!.id
+    const longTimes = (await t.query(api.patient.availability, { serviceId: long })).days.find((d) => d.date === DAY)!.times
+    expect(longTimes).toContain('14:15')
+    expect(longTimes).not.toContain('14:00')
     const c = await patient(t, '08034444445')
-    await book(t, c, long, '14:00')
+    await book(t, c, long, '14:15')
     const later = (await t.query(api.patient.availability, { serviceId: cleaning })).days.find((d) => d.date === DAY)!.times
     expect(later).not.toContain('15:00')
-    expect(later).toContain('15:15')
+    expect(later).toContain('15:30')
   })
 
   test('book up to 2 days ahead, and only on booking days', async () => {

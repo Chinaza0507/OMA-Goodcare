@@ -109,7 +109,6 @@ export async function queueInfo(ctx: QueryCtx, appt: Doc<'appointments'>) {
 // ---------- booking ----------
 // Patients book a booking day up to MAX_DAYS_AHEAD days ahead (today counts as day 0).
 export const MAX_DAYS_AHEAD = 2
-export const STEP_MINUTES = 30 // start times every 30 minutes: 7:00, 7:30, 8:00…
 export const addDays = (date: string, days: number) => {
   const d = new Date(`${date}T12:00:00Z`)
   d.setUTCDate(d.getUTCDate() + days)
@@ -126,16 +125,17 @@ export function bookingDates(dept: Doc<'departments'>, today = todayLagos()) {
   return out
 }
 
-// Start times where a service of this length fits in the booking hours without overlapping any
-// booking already made (one doctor, one line). Times are offered every 30 minutes, plus the exact
-// moment each booking ends, so the next patient can start right after: braces 10:00–11:30 → 11:30.
+// Bookable blocks for a service on a day. Each block is as long as the service (braces 60 min:
+// 9:00–10:00, 10:00–11:00…), starting from the department's booking hours, plus a block right after
+// each existing booking ends so no time is wasted. A block is free only if nothing overlaps it,
+// so while someone is booked 6:00–7:00 nothing else can start before 7:00.
 export function freeTimes(dept: Doc<'departments'>, minutes: number, date: string, booked: Doc<'appointments'>[]) {
   const busy = booked.filter((a) => a.status !== 'cancelled').map((a) => [toMinutes(a.time), toMinutes(a.time) + a.minutes])
   const open = toMinutes(dept.opensAt)
   const close = toMinutes(dept.closesAt)
   const earliest = date === todayLagos() ? nowMinutesLagos() : 0
   const starts = new Set<number>()
-  for (let t = open; t < close; t += STEP_MINUTES) starts.add(t)
+  for (let t = open; t + minutes <= close; t += minutes) starts.add(t)
   for (const [, end] of busy) if (end >= open) starts.add(end)
   return [...starts]
     .sort((x, y) => x - y)

@@ -12,6 +12,11 @@ const clock = (hhmm) => {
   const [h, m] = hhmm.split(':').map(Number)
   return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`
 }
+const addMins = (hhmm, n) => {
+  const [h, m] = hhmm.split(':').map(Number)
+  const total = h * 60 + m + n
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
+}
 const todayLagos = () => new Intl.DateTimeFormat('en-CA', { timeZone: LAGOS }).format(new Date())
 const dayParts = (iso) => {
   const d = new Date(`${iso}T00:00:00Z`)
@@ -234,14 +239,14 @@ export default function BookVisit() {
                     })}
                   </div>
                   {dayTimes && dayTimes.length > 0 && (
-                    <p className="m-0 mb-2.5 text-sm font-semibold text-plum">{t('bookPage.nextFree').replace('{time}', clock(dayTimes[0])).replace('{n}', service.minutes)}</p>
+                    <p className="m-0 mb-2.5 text-sm font-semibold text-plum">{t('bookPage.blocks').replace('{service}', service.name).replaceAll('{n}', service.minutes)}</p>
                   )}
                   {dayTimes && dayTimes.length > 0 ? (
-                    <div className="grid max-h-[260px] grid-cols-3 gap-2 overflow-y-auto pr-1 sm:grid-cols-5">
+                    <div className="grid max-h-[300px] grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3">
                       {dayTimes.map((s) => (
                         <button key={s} type="button" aria-pressed={time === s} onClick={() => setTime(s)}
-                          className={`min-h-11 cursor-pointer rounded-xl border-[1.5px] font-display text-[15px] font-bold transition-colors ${time === s ? 'border-rose bg-rose text-white' : 'border-line bg-white text-ink hover:border-rose-line hover:bg-blush'}`}>
-                          {clock(s)}
+                          className={`min-h-12 cursor-pointer rounded-xl border-[1.5px] px-2 text-[15px] font-semibold transition-colors ${time === s ? 'border-rose bg-rose text-white' : 'border-line bg-white text-ink hover:border-rose-line hover:bg-blush'}`}>
+                          {clock(s)} – {clock(addMins(s, service.minutes))}
                         </button>
                       ))}
                     </div>
@@ -280,7 +285,7 @@ export default function BookVisit() {
               {[
                 [t('bookPage.hospital'), `${clinic.name}`],
                 [t('bookPage.serviceRow'), `${service.name} · ${dept.name}`],
-                [t('visit.when'), `${dayParts(date).long} · ${clock(time)}`],
+                [t('visit.when'), `${dayParts(date).long} · ${clock(time)} – ${clock(addMins(time, service.minutes))}`],
                 [t('bookPage.fee'), service.price == null ? t('bookPage.feeUnknown') : service.price === 0 ? t('bookPage.free') : naira(service.price)],
               ].map(([k, v]) => (
                 <div key={k} className="flex items-start justify-between gap-4 py-3">
