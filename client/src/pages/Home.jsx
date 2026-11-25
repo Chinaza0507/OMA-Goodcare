@@ -174,14 +174,9 @@ function Ticket({ a, serving, t, onDetails }) {
       )}
 
       {!called && (
-        <div className="relative mt-6 grid gap-2.5 sm:grid-cols-2">
-          <div className="flex items-center gap-2.5 rounded-2xl bg-white/[0.12] px-4 py-3 text-[15px]">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
-            {checkedIn ? <strong>{t('dash.checkedIn')}</strong> : <span>{t('dash.beThereBy')} <strong>{clock(a.time)}</strong></span>}
-          </div>
-          <div className="rounded-2xl bg-white px-4 py-3 text-[15px] font-semibold text-plum-deep">
-            {t('dash.estimated')} <span className="whitespace-nowrap">{clock(q.estimatedFrom)}–{clock(q.estimatedTo)}</span>
-          </div>
+        <div className="relative mt-6 flex flex-wrap items-center justify-between gap-2.5 rounded-2xl bg-white px-4 py-3 text-plum-deep">
+          <span className="text-[15px] font-semibold">{t('dash.estimated')} <span className="whitespace-nowrap font-bold">{clock(q.estimatedFrom)}–{clock(q.estimatedTo)}</span></span>
+          {checkedIn && <span className="rounded-full bg-[#e9f7ee] px-3 py-1 text-xs font-bold text-[#1d6b3a]">{t('dash.checkedIn')}</span>}
         </div>
       )}
       <div className="relative mt-4 flex items-center justify-between gap-3">
@@ -208,11 +203,11 @@ export default function Home() {
         api('/appointments?scope=upcoming'), api('/kolo'), api('/family'), api('/kolo/transactions?limit=20'),
       ])
       rememberStart(a.appointments)
-      const liveAppt = a.appointments.find((x) => x.queue)
-      let serving = null
-      if (liveAppt) {
-        const ns = await api(`/public/clinics/${liveAppt.clinicId}/now-serving`).catch(() => null)
-        serving = ns?.departments.find((d) => d.departmentId === liveAppt.departmentId)?.nowServing?.queueNumber ?? null
+      // "Now serving" number for every department where someone in the family is in line today.
+      const serving = {}
+      for (const clinicId of new Set(a.appointments.filter((x) => x.queue).map((x) => x.clinicId))) {
+        const ns = await api(`/public/clinics/${clinicId}/now-serving`).catch(() => null)
+        for (const d of ns?.departments ?? []) serving[d.departmentId] = d.nowServing?.queueNumber ?? null
       }
       setData({ appts: a.appointments, kolo: k, family: f.members, history: h.transactions, serving })
       setError(false)
@@ -224,20 +219,23 @@ export default function Home() {
   const isPatient = user?.role === 'patient'
   useEffect(() => { if (isPatient) load() }, [isPatient, load])
 
-  const live = data?.appts.find((a) => a.queue) ?? null
-  const later = data ? data.appts.filter((a) => a !== live) : []
+  // Everyone in the family who is in a queue today gets a live card. Alerts follow whoever is
+  // closest to being called.
+  const lives = data ? data.appts.filter((a) => a.queue) : []
+  const live = [...lives].sort((x, y) => (y.status === 'called') - (x.status === 'called') || x.queue.ahead - y.queue.ahead)[0] ?? null
+  const later = data ? data.appts.filter((a) => !a.queue) : []
 
   // Live updates: join the department's room; refetch when the front desk moves the queue.
   // A slow poll is the safety net if the connection drops.
-  const liveDept = live?.departmentId
+  const liveDepts = [...new Set(lives.map((a) => a.departmentId))].join(',')
   useEffect(() => {
-    if (!liveDept) return
+    if (!liveDepts) return
     const socket = connectSocket()
-    socket.on('connect', () => socket.emit('join', { departmentId: liveDept }))
+    socket.on('connect', () => liveDepts.split(',').forEach((departmentId) => socket.emit('join', { departmentId })))
     socket.on('queue:changed', load)
     const poll = setInterval(load, pollEvery(30_000))
     return () => { socket.disconnect(); clearInterval(poll) }
-  }, [liveDept, load])
+  }, [liveDepts, load])
 
   useEffect(() => () => stopAlert(), [])
   const [ringing, setRinging] = useState(false)
@@ -358,7 +356,10 @@ export default function Home() {
             {/* Main column */}
             <div className="flex flex-col gap-5">
               {live ? (
-                <Ticket a={live} serving={data.serving} t={t} onDetails={() => setOpenVisit(live)} />
+                <>
+                  {lives.length > 1 && <h2 className="dash-in m-0 text-lg font-bold">{fill(t('dash.todayVisits'), { n: lives.length })}</h2>}
+                  {lives.map((a) => <Ticket key={a.id} a={a} serving={data.serving[a.departmentId] ?? null} t={t} onDetails={() => setOpenVisit(a)} />)}
+                </>
               ) : (
                 <section className="dash-in rounded-[28px] border-[1.5px] border-dashed border-rose-line bg-white/60 px-6 py-8 text-center">
                   <h2 className="m-0 text-xl font-bold">{t('dash.noVisit')}</h2>
@@ -378,21 +379,21 @@ export default function Home() {
               <NearbyHospitals t={t} />
 
               {later.length > 0 && (
-                <section className="dash-in rounded-[24px] border border-line bg-white p-5">
-                  <h2 className="m-0 mb-3 text-base font-bold">{live ? t('dash.upcoming') : t('dash.nextVisit')}</h2>
+                <section className="dash-in rounded-[24px] bg-white p-5 shadow-[0_12px_30px_rgba(90,45,176,0.07)] ring-1 ring-line sm:p-6">
+                  <h2 className="m-0 mb-4 text-xl font-bold">{live ? t('dash.upcoming') : t('dash.nextVisit')}</h2>
                   <ul className="m-0 flex list-none flex-col divide-y divide-line p-0">
                     {later.slice(0, 3).map((a) => (
-                      <li key={a.id} className="py-3 first:pt-0 last:pb-0">
+                      <li key={a.id} className="py-3.5 first:pt-0 last:pb-0">
                         <button type="button" onClick={() => setOpenVisit(a)} className="flex w-full cursor-pointer items-center gap-4 rounded-xl border-0 bg-transparent p-0 text-left font-[inherit] text-ink hover:bg-plum-faint">
-                        <span className="flex w-14 shrink-0 flex-col items-center rounded-xl bg-blush py-1.5 text-rose">
-                          <span className="text-[11px] font-bold uppercase">{dayLabel(a.date, lang).split(' ')[0]}</span>
-                          <span className="font-display text-lg font-extrabold leading-none">{a.date.slice(8)}</span>
+                        <span className="flex w-16 shrink-0 flex-col items-center rounded-2xl bg-rose py-2 text-white">
+                          <span className="text-xs font-bold uppercase">{dayLabel(a.date, lang).split(' ')[0]}</span>
+                          <span className="font-display text-2xl font-bold leading-none">{a.date.slice(8)}</span>
                         </span>
                         <span className="min-w-0 flex-1">
-                          <b className="block truncate text-[15px]">{a.patientName} · {a.serviceName}</b>
+                          <b className="block truncate text-[17px]">{a.patientName} · {a.serviceName}</b>
                           <span className="block truncate text-sm text-muted">{a.departmentName}, {a.clinicName}</span>
                         </span>
-                        <span className="shrink-0 font-display text-[15px] font-bold">{clock(a.time)}</span>
+                        <span className="shrink-0 rounded-xl bg-plum-tint px-3 py-1.5 font-display text-base font-bold text-plum">{clock(a.time)}</span>
                         </button>
                       </li>
                     ))}

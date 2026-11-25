@@ -66,7 +66,13 @@ export async function queueInfo(ctx: QueryCtx, appt: Doc<'appointments'>) {
   if (!isActive(appt.status) || appt.date !== todayLagos()) return null
   const now = nowMinutesLagos()
   const nowMs = Date.now()
-  const line = (await dayAppointments(ctx, appt.departmentId, appt.date)).filter((a) => isActive(a.status)).sort(queueCompare)
+  // Someone who hasn't arrived 10+ minutes after their booked time is treated as late: they no
+  // longer hold others up (if they turn up, the desk puts them back in line).
+  const LATE_AFTER = 10
+  const line = (await dayAppointments(ctx, appt.departmentId, appt.date))
+    .filter((a) => isActive(a.status))
+    .filter((a) => a._id === appt._id || a.status !== 'booked' || toMinutes(a.time) + LATE_AFTER > now)
+    .sort(queueCompare)
   const ahead = line.findIndex((a) => a._id === appt._id)
 
   // Whoever is with the doctor finishes at the later of "now" and their call time + service length.

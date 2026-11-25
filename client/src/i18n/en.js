@@ -95,6 +95,7 @@ export default {
   home: { hello: 'Hello', soon: 'Your dashboard is coming soon.', logout: 'Log out' },
   menu: { home: 'Home', book: 'Book', kolo: 'Kolo', family: 'Family', account: 'Profile', main: 'Main menu', settings: 'Settings', collapse: 'Shrink menu', expand: 'Expand menu' },
   dash: {
+    todayVisits: 'Today · {n} visits',
     stopSound: 'Stop sound',
     runningLate: 'The doctor is running about {n} min late. Your time has moved to {time}.',
     onTime: 'On time',

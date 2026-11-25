@@ -161,6 +161,21 @@ describe('honest wait times', () => {
   })
 })
 
+describe('wait estimate ignores no-shows in waiting', () => {
+  test('someone 10+ min late who never arrived does not push others back', async () => {
+    const { t, cleaning } = await setup()
+    const a = await patient(t, '08038000011')
+    const b = await patient(t, '08038000012')
+    await book(t, a, cleaning, '09:30') // never arrives
+    const second = await book(t, b, cleaning, '10:00')
+    vi.setSystemTime(at('09:50'))
+    const q = (await t.query(api.patient.visit, { token: b.token, id: second.appointment.id })).appointment.queue!
+    expect(q.ahead).toBe(0)
+    expect(q.estimatedFrom).toBe('10:00')
+    expect(q.delayMinutes).toBe(0)
+  })
+})
+
 describe('front desk', () => {
   test('arrive, call next, seen: deposit goes to the fee; free service returns it', async () => {
     const { t, desk, deptId, cleaning, checkup } = await setup()
