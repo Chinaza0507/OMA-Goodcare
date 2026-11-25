@@ -37,6 +37,7 @@ export default defineSchema({
     cancelWindowMinutes: v.number(),
     depositNaira: v.number(),
     active: v.boolean(),
+    demo: v.optional(v.boolean()), // demo hospitals, removable in one go
   }).index('by_status', ['status']),
 
   // A department has ONE booking line: on its booking days and hours, one doctor sees the

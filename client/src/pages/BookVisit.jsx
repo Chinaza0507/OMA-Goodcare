@@ -238,15 +238,12 @@ export default function BookVisit() {
                       )
                     })}
                   </div>
-                  {dayTimes && dayTimes.length > 0 && (
-                    <p className="m-0 mb-2.5 text-sm font-semibold text-plum">{t('bookPage.blocks').replace('{service}', service.name).replaceAll('{n}', service.minutes)}</p>
-                  )}
                   {dayTimes && dayTimes.length > 0 ? (
                     <div className="grid max-h-[300px] grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3">
                       {dayTimes.map((s) => (
                         <button key={s} type="button" aria-pressed={time === s} onClick={() => setTime(s)}
                           className={`min-h-12 cursor-pointer rounded-xl border-[1.5px] px-2 text-[15px] font-semibold transition-colors ${time === s ? 'border-rose bg-rose text-white' : 'border-line bg-white text-ink hover:border-rose-line hover:bg-blush'}`}>
-                          {clock(s)} – {clock(addMins(s, service.minutes))}
+                          {clock(s)} – {clock(addMins(s, 35))}
                         </button>
                       ))}
                     </div>
