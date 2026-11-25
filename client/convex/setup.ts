@@ -44,8 +44,7 @@ const DEMO: { name: string; type: 'public' | 'mission' | 'private' | 'dental' | 
     name: 'Harmony General Hospital', type: 'public', area: 'Ikeja', address: '14 Obafemi Awolowo Way', landmark: 'Near Ikeja City Mall',
     email: 'desk@harmony-general.demo', lat: 6.6018, lng: 3.3515,
     depts: [
-      { name: 'General Outpatient (GOPD)', days: WEEKDAYS, from: '09:00', to: '16:00', services: [['General consultation', 20, 2000], ['Blood pressure check', 15, 0], ['Malaria test', 20, 1500], ['Blood test', 15, 3000]] },
-      { name: 'Antenatal', days: [2, 4], from: '09:00', to: '13:00', services: [['Antenatal visit', 30, 0], ['Ultrasound scan', 30, 8000]] },
+      { name: 'General Outpatient (GOPD)', days: WEEKDAYS, from: '09:00', to: '16:00', services: [['General consultation', 20, 2000], ['Blood pressure check', 15, 0], ['Malaria test', 20, 1500], ['Blood test', 15, 3000], ['Ultrasound scan', 30, 8000]] },
       { name: 'Children', days: [1, 3, 5], from: '09:00', to: '14:00', services: [['Child check-up', 25, 0], ['Immunisation', 15, 0]] },
     ],
   },
