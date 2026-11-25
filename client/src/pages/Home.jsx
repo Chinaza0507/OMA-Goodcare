@@ -1,4 +1,5 @@
 import { showLive, showNotification } from '../lib/notify.js'
+import { isTurnClose } from '../lib/alertPref.js'
 import { getAlertSeconds, playAlert, stopAlert } from '../lib/sounds.js'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
@@ -239,7 +240,7 @@ export default function Home() {
 
   useEffect(() => () => stopAlert(), [])
   const [ringing, setRinging] = useState(false)
-  const turnClose = live && live.queue.alertNow && live.status !== 'called'
+  const turnClose = isTurnClose(live)
   // Live queue updates (if turned on in Profile): keep one notification showing your place.
   const liveKey = live ? `${live.status}:${live.queue.ahead}:${live.queue.estimatedFrom}` : ''
   useEffect(() => {

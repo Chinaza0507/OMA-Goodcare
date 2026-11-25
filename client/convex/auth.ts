@@ -30,7 +30,7 @@ export const register = mutation({
 
     const id = await ctx.db.insert('users', {
       role: 'patient', name, phone, email, secretHash: await hashSecret(a.pin), language,
-      alertAhead: 3, active: true, consentAt: Date.now(), failedAttempts: 0,
+      alertAhead: 2, active: true, consentAt: Date.now(), failedAttempts: 0,
     })
     // Everyone starts as their own "family member", so booking for yourself and for family work the same way.
     await ctx.db.insert('familyMembers', { ownerId: id, name, isSelf: true })

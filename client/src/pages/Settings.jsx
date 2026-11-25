@@ -6,6 +6,7 @@ import { api } from '../api.js'
 import { THEMES, applyTheme, currentTheme } from '../lib/theme.js'
 import ConfirmBox from '../components/ConfirmBox.jsx'
 import AlertSound from '../components/AlertSound.jsx'
+import { ALERT_MINUTES, getAlertMode, setAlertMode } from '../lib/alertPref.js'
 import { Field, PinInput } from '../components/fields.jsx'
 import { useAuth } from '../auth.jsx'
 import { useT } from '../i18n/index.jsx'
@@ -26,6 +27,8 @@ export default function Settings() {
   const [delPin, setDelPin] = useState('')
   const [delError, setDelError] = useState('')
   const [saved, setSaved] = useState('')
+  const [alertMode, setAlertModeState] = useState(getAlertMode)
+  const chooseMode = (v) => { setAlertMode(v); setAlertModeState(v); setSaved('alert') }
   const [busy, setBusy] = useState(false)
   const [theme, setTheme] = useState(currentTheme)
 
@@ -75,20 +78,43 @@ export default function Settings() {
             <Saved show={saved === 'alert'} t={t} />
           </div>
           <p className="mb-4 mt-1 text-sm text-muted">{t('settings.alertHelp')}</p>
-          <div role="radiogroup" aria-label={t('settings.alertTitle')} className="flex flex-wrap gap-2">
-            {ALERT_CHOICES.map((n) => {
-              const on = user.alertAhead === n
-              return (
-                <button key={n} type="button" role="radio" aria-checked={on} disabled={busy} onClick={() => setAlert(n)}
-                  className={`min-h-11 min-w-12 cursor-pointer rounded-xl border-[1.5px] px-4 font-display text-base font-bold transition-colors disabled:cursor-wait ${on ? 'border-plum bg-plum text-white' : 'border-line bg-white text-ink hover:border-plum-soft hover:bg-plum-tint'}`}>
-                  {n}
-                </button>
-              )
-            })}
+          <div role="tablist" aria-label={t('settings.alertTitle')} className="mb-4 inline-flex rounded-2xl bg-plum-faint p-1 ring-1 ring-line">
+            {['people', 'minutes'].map((m) => (
+              <button key={m} type="button" role="tab" aria-selected={alertMode.mode === m} onClick={() => chooseMode({ ...alertMode, mode: m })}
+                className={`min-h-10 cursor-pointer rounded-xl border-0 px-4 text-sm font-bold ${alertMode.mode === m ? 'bg-plum text-white' : 'bg-transparent text-ink hover:bg-plum-tint'}`}>{t(`settings.alertBy.${m}`)}</button>
+            ))}
           </div>
-          <p className="mb-0 mt-3 text-sm text-muted">
-            {user.alertAhead === 1 ? t('settings.onePerson') : t('settings.people').replace('{n}', user.alertAhead)}
-          </p>
+          {alertMode.mode === 'people' ? (
+            <>
+              <div role="radiogroup" aria-label={t('settings.alertTitle')} className="flex flex-wrap gap-2">
+                {ALERT_CHOICES.map((n) => {
+                  const on = user.alertAhead === n
+                  return (
+                    <button key={n} type="button" role="radio" aria-checked={on} disabled={busy} onClick={() => setAlert(n)}
+                      className={`min-h-11 min-w-12 cursor-pointer rounded-xl border-[1.5px] px-4 font-display text-base font-bold transition-colors disabled:cursor-wait ${on ? 'border-plum bg-plum text-white' : 'border-line bg-white text-ink hover:border-plum-soft hover:bg-plum-tint'}`}>
+                      {n}
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="mb-0 mt-3 text-sm text-muted">{t('settings.peopleAhead').replace('{n}', user.alertAhead)}</p>
+            </>
+          ) : (
+            <>
+              <div role="radiogroup" aria-label={t('settings.alertTitle')} className="flex flex-wrap gap-2">
+                {ALERT_MINUTES.map((n) => {
+                  const on = alertMode.minutes === n
+                  return (
+                    <button key={n} type="button" role="radio" aria-checked={on} onClick={() => chooseMode({ mode: 'minutes', minutes: n })}
+                      className={`min-h-11 min-w-[64px] cursor-pointer rounded-xl border-[1.5px] px-3 text-sm font-bold transition-colors ${on ? 'border-plum bg-plum text-white' : 'border-line bg-white text-ink hover:border-plum-soft hover:bg-plum-tint'}`}>
+                      {t('settings.mins').replace('{n}', n)}
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="mb-0 mt-3 text-sm text-muted">{t('settings.minutesBefore').replace('{n}', alertMode.minutes)}</p>
+            </>
+          )}
         </section>
 
         <AlertSound t={t} />
