@@ -1,4 +1,5 @@
-import { showNotification } from '../lib/notify.js'
+import { showLive, showNotification } from '../lib/notify.js'
+import { playTone } from '../lib/sounds.js'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { connectSocket, pollEvery } from '../lib/socket.js'
@@ -85,20 +86,7 @@ function CountUp({ value, format = (n) => n }) {
 function nudge() {
   // Browsers only allow vibration after the person has tapped the page.
   try { if (navigator.userActivation?.hasBeenActive) navigator.vibrate?.([200, 100, 200]) } catch { /* not supported */ }
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)()
-    ;[660, 880].forEach((f, i) => {
-      const o = ctx.createOscillator()
-      const g = ctx.createGain()
-      o.frequency.value = f
-      g.gain.setValueAtTime(0.0001, ctx.currentTime + i * 0.18)
-      g.gain.exponentialRampToValueAtTime(0.2, ctx.currentTime + i * 0.18 + 0.02)
-      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + i * 0.18 + 0.3)
-      o.connect(g).connect(ctx.destination)
-      o.start(ctx.currentTime + i * 0.18)
-      o.stop(ctx.currentTime + i * 0.18 + 0.32)
-    })
-  } catch { /* audio blocked until the user interacts; the banner still shows */ }
+  playTone()
 }
 
 // Progress along today's queue: from "Now serving" to your number.
@@ -252,6 +240,14 @@ export default function Home() {
   }, [liveDept, load])
 
   const turnClose = live && live.queue.alertNow && live.status !== 'called'
+  // Live queue updates (if turned on in Profile): keep one notification showing your place.
+  const liveKey = live ? `${live.status}:${live.queue.ahead}:${live.queue.estimatedFrom}` : ''
+  useEffect(() => {
+    if (!live) return
+    showLive(`${live.patientName} · #${live.queueNumber}`, live.status === 'called' ? t('notif.yourTurn')
+      : fill(t('notif.liveBody'), { n: live.queue.ahead, time: clock(live.queue.estimatedFrom) }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveKey])
   useEffect(() => {
     if ((turnClose || live?.status === 'called') && !alerted.current.has(`${live.id}:${live.status}`)) {
       alerted.current.add(`${live.id}:${live.status}`)

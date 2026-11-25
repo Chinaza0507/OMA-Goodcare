@@ -98,3 +98,9 @@ input:focus:not(.no-ring) { outline: 3px solid var(--color-plum-soft); outline-o
 .kolo-coin { animation: koloCoin 0.9s ease-in both; }
 .kolo-wiggle { animation: koloWiggle 0.6s ease-in-out 0.75s both; transform-origin: 50% 80%; }
 @media (prefers-reduced-motion: reduce) { .kolo-coin { display: none; } .kolo-wiggle { animation: none; } }
+
+/* Profile characters blink every few seconds. */
+@keyframes avatarBlink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(0.1); } }
+@media (prefers-reduced-motion: no-preference) {
+  .avatar-blink { animation: avatarBlink 4.5s ease-in-out infinite; transform-origin: 50px 48px; transform-box: view-box; }
+}

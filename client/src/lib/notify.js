@@ -23,3 +23,12 @@ export function showNotification(title, body) {
   if (notifyState() !== 'on') return
   try { new Notification(title, { body, icon: '/favicon.svg', tag: 'oma-queue' }) } catch { /* some phones need a service worker */ }
 }
+
+// Live queue updates: one notification that keeps being replaced with your latest place in line.
+const LIVE = 'oma_live_notify'
+export const liveState = () => { try { return localStorage.getItem(LIVE) === 'on' } catch { return false } }
+export const setLive = (on) => { try { localStorage.setItem(LIVE, on ? 'on' : 'off') } catch { /* ignore */ } }
+export function showLive(title, body) {
+  if (!liveState() || notifyState() !== 'on') return
+  try { new Notification(title, { body, icon: '/favicon.svg', tag: 'oma-live', silent: true }) } catch { /* ignore */ }
+}
