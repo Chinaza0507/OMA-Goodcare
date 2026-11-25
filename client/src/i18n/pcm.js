@@ -446,7 +446,7 @@ export default {
   },
   bookPage: {
     title: 'Book visit',
-    steps: ['Service', 'Time', 'Who', 'Confirm'],
+    steps: ['Service', 'Time', 'Confirm'],
     search: 'Find hospital by name or area',
     noHospitals: 'No hospital match wetin you find yet.',
     from: 'from',

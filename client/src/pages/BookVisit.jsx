@@ -21,7 +21,6 @@ const dayParts = (iso) => {
     long: new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }).format(d),
   }
 }
-const ALERTS = [1, 2, 3, 4, 5, 7, 10]
 // "Wed, Thu" from booking days (0 = Sunday … 6 = Saturday).
 const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const daysLabel = (days) => (days.length === 7 ? 'Every day' : days.map((d) => DAY_NAMES[d]).join(', '))
@@ -72,7 +71,6 @@ export default function BookVisit() {
   const [slotsRefresh, setSlotsRefresh] = useState(0)
   const [time, setTime] = useState(null)
   const [memberId, setMemberId] = useState(null)
-  const [alertAhead, setAlertAhead] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [booked, setBooked] = useState(null)
@@ -127,7 +125,7 @@ export default function BookVisit() {
   const member = family.find((m) => m.id === memberId)
   const deposit = clinic?.depositNaira ?? 0
   const lowKolo = kolo && deposit > 0 && kolo.available < deposit
-  const alertValue = alertAhead ?? user?.alertAhead ?? 3
+  const alertValue = user?.alertAhead ?? 2 // set in Settings → Turn alert
 
   async function confirm() {
     if (busy || lowKolo) return
@@ -136,7 +134,7 @@ export default function BookVisit() {
     try {
       const d = await api('/appointments', { method: 'POST', body: { familyMemberId: memberId, serviceId, date, time, alertAhead: alertValue } })
       setBooked(d.appointment)
-      setStep(4)
+      setStep(3)
     } catch (e) {
       setError(msg(e.code))
       if (e.code === 'slot_taken' || e.code === 'slot_past' || e.code === 'invalid_date') { setStep(1); setSlotsRefresh((n) => n + 1) }
@@ -161,12 +159,12 @@ export default function BookVisit() {
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M19 12H5M11 18l-6-6 6-6" /></svg>
           </Link>
           <div className="min-w-0">
-            <h1 className="m-0 text-[26px] font-extrabold leading-tight">{t('bookPage.title')}</h1>
+            <h1 className="m-0 text-[26px] font-semibold leading-tight">{t('bookPage.title')}</h1>
             {clinic && <p className="m-0 truncate text-sm text-muted">{clinic.name} · {[clinic.area, clinic.state].filter(Boolean).join(', ')}</p>}
           </div>
         </div>
 
-        {step < 4 && <Stepper step={step} t={t} />}
+        {step < 3 && <Stepper step={step} t={t} />}
 
         {loadError && <p role="alert" className="m-0 rounded-2xl bg-white p-5 text-muted ring-1 ring-line">{loadError}</p>}
         {!clinic && !loadError && <div aria-hidden="true" className="h-[360px] animate-pulse rounded-[24px] bg-[#efe7ec]" />}
@@ -191,7 +189,7 @@ export default function BookVisit() {
                 </div>
                 <div className="grid gap-2.5 sm:grid-cols-2">
                   {d.services.map((sv) => (
-                    <Choice key={sv.id} on={serviceId === sv.id} onClick={() => { setServiceId(sv.id); setError('') }} className="flex items-center justify-between gap-3 px-4 py-3.5">
+                    <Choice key={sv.id} on={serviceId === sv.id} onClick={() => { setServiceId(sv.id); setError(''); setStep(1) }} className="flex items-center justify-between gap-3 px-4 py-3.5">
                       <span className="min-w-0">
                         <b className="block truncate">{sv.name}</b>
                         <span className="text-sm text-muted">{t('bookPage.minutes').replace('{n}', sv.minutes)}</span>
@@ -202,10 +200,6 @@ export default function BookVisit() {
                 </div>
               </div>
             ))}
-            <div className="flex justify-end">
-              <button type="button" disabled={!service} onClick={() => { setError(''); setStep(1) }}
-                className={`${primary} ${service ? 'cursor-pointer bg-plum text-white hover:bg-plum-dark' : 'cursor-not-allowed bg-[#efe7ec] text-[#6b5a65]'}`}>{t('bookPage.next')}</button>
-            </div>
           </section>
         )}
 
@@ -266,55 +260,26 @@ export default function BookVisit() {
           </section>
         )}
 
-        {/* Step 2: who, and when to alert */}
-        {clinic && step === 2 && (
-          <section className="flex flex-col gap-6 rounded-[24px] bg-white p-5 ring-1 ring-line sm:p-6">
-            <div className="step-in">
-              <h2 className="m-0 mb-3 text-base font-bold">{t('bookPage.who')}</h2>
-              <div className="grid gap-2.5 sm:grid-cols-2">
-                {family.map((m) => (
-                  <Choice key={m.id} on={memberId === m.id} onClick={() => setMemberId(m.id)} className="flex items-center gap-3 px-4 py-3">
-                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-bold ${memberId === m.id ? 'bg-plum text-white' : 'bg-plum-soft text-plum-deep'}`}>
-                      {m.name.split(/\s+/).slice(0, 2).map((w) => w[0]?.toUpperCase()).join('')}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <b className="block truncate">{m.name}</b>
-                      <span className="text-sm text-muted">{m.isSelf ? t('dash.you') : m.age != null ? `${m.age} ${t('famPage.years')}` : ''}</span>
-                    </span>
-                  </Choice>
-                ))}
-              </div>
-              <Link to="/family" className="mt-3 inline-block text-sm font-bold text-plum no-underline hover:underline">+ {t('dash.addFamily')}</Link>
-            </div>
-
-            <div className="step-in">
-              <h2 className="m-0 text-base font-bold">{t('bookPage.alert')}</h2>
-              <p className="m-0 mb-3 mt-1 text-sm text-muted">{t('bookPage.alertHelp')}</p>
-              <div className="flex flex-wrap gap-2">
-                {ALERTS.map((n) => (
-                  <button key={n} type="button" aria-pressed={alertValue === n} onClick={() => setAlertAhead(n)}
-                    className={`min-h-11 min-w-12 cursor-pointer rounded-xl border-[1.5px] px-4 font-display text-base font-bold ${alertValue === n ? 'border-plum bg-plum text-white' : 'border-line bg-white text-ink hover:border-plum-soft'}`}>{n}</button>
-                ))}
-              </div>
-            </div>
-
-            <div className="flex flex-col-reverse justify-between gap-2.5 sm:flex-row">
-              {back(1)}
-              <button type="button" disabled={!memberId} onClick={() => { setError(''); setStep(3) }}
-                className={`${primary} ${memberId ? 'cursor-pointer bg-plum text-white hover:bg-plum-dark' : 'cursor-not-allowed bg-[#efe7ec] text-[#6b5a65]'}`}>{t('bookPage.next')}</button>
-            </div>
-          </section>
-        )}
-
         {/* Step 3: check and confirm */}
-        {clinic && step === 3 && service && member && time && date && (
+        {clinic && step === 2 && service && member && time && date && (
           <section className="flex flex-col gap-5 rounded-[24px] bg-white p-5 ring-1 ring-line sm:p-6">
             <h2 className="step-in m-0 text-lg font-bold">{t('bookPage.review')}</h2>
+            <div className="step-in">
+              <span className="text-sm font-semibold">{t('bookPage.who')}</span>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {family.map((m) => (
+                  <button key={m.id} type="button" aria-pressed={memberId === m.id} onClick={() => setMemberId(m.id)}
+                    className={`min-h-11 cursor-pointer rounded-xl border-[1.5px] px-4 text-sm font-semibold ${memberId === m.id ? 'border-plum bg-plum text-white' : 'border-line bg-white text-ink hover:border-plum-soft'}`}>
+                    {m.isSelf ? `${m.name.split(' ')[0]} (${t('dash.you')})` : m.name}
+                  </button>
+                ))}
+                <Link to="/family" className="flex min-h-11 items-center rounded-xl border-[1.5px] border-dashed border-line px-4 text-sm font-semibold text-plum no-underline hover:bg-plum-faint">+ {t('dash.addFamily')}</Link>
+              </div>
+            </div>
             <dl className="step-in m-0 grid gap-0 divide-y divide-line rounded-2xl bg-plum-faint px-4 ring-1 ring-line">
               {[
                 [t('bookPage.hospital'), `${clinic.name}`],
                 [t('bookPage.serviceRow'), `${service.name} · ${dept.name}`],
-                [t('visit.for'), member.name],
                 [t('visit.when'), `${dayParts(date).long} · ${clock(time)}`],
                 [t('bookPage.fee'), service.price == null ? t('bookPage.feeUnknown') : service.price === 0 ? t('bookPage.free') : naira(service.price)],
               ].map(([k, v]) => (
@@ -348,7 +313,7 @@ export default function BookVisit() {
             )}
 
             <div className="flex flex-col-reverse justify-between gap-2.5 sm:flex-row">
-              {back(2)}
+              {back(1)}
               <button type="button" disabled={busy || lowKolo} onClick={confirm}
                 className={`${primary} ${!busy && !lowKolo ? 'cursor-pointer bg-rose text-white hover:bg-rose-dark' : 'cursor-not-allowed bg-[#efe7ec] text-[#6b5a65]'}`}>
                 {busy ? t('common.loading') : t('bookPage.confirm')}
@@ -358,7 +323,7 @@ export default function BookVisit() {
         )}
 
         {/* Done */}
-        {step === 4 && booked && (
+        {step === 3 && booked && (
           <section className="step-in flex flex-col items-center gap-4 rounded-[28px] bg-white px-6 py-10 text-center ring-1 ring-line">
             <span className="flex h-20 w-20 items-center justify-center rounded-full bg-[#e9f7ee] text-[#1d6b3a]">
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7" /></svg>
