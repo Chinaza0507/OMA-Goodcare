@@ -99,7 +99,7 @@ function nudge() {
 }
 
 // Progress along today's queue: from "Now serving" to your number.
-function QueueProgress({ a, serving, t }) {
+function QueueProgress({ a, serving, t, compact = false }) {
   const start = startAhead(a)
   const ahead = a.queue.ahead
   const pct = start > 0 ? 0.08 + 0.84 * ((start - ahead) / start) : 0.92
@@ -109,7 +109,7 @@ function QueueProgress({ a, serving, t }) {
     gsap.to(bar.current, { width: `${Math.round(pct * 100)}%`, duration: reduce ? 0 : 0.9, ease: 'power3.out' })
   }, { dependencies: [pct] })
   return (
-    <div className="relative mt-6">
+    <div className={`relative ${compact ? 'mt-4' : 'mt-6'}`}>
       <div className="mb-2 flex items-end justify-between gap-3 text-[13px]">
         <span className="text-rose-tint">{t('dash.nowServing')} <b className="font-display text-[15px] text-white">{serving ? `#${serving}` : '—'}</b></span>
         <span className="text-rose-tint">{t('dash.yourNumber')} <b className="font-display text-[15px] text-white">#{a.queueNumber}</b></span>
@@ -125,36 +125,12 @@ function QueueProgress({ a, serving, t }) {
   )
 }
 
-// Compact live card, used when more than one person in the family is in line today.
-function MiniTicket({ a, t, onDetails }) {
-  const q = a.queue
-  const called = a.status === 'called'
-  return (
-    <button type="button" onClick={onDetails} aria-label={`${a.patientName} · ${t('visit.title')}`}
-      className="dash-in flex w-full cursor-pointer items-center gap-4 rounded-[22px] border-0 bg-rose px-4 py-3.5 text-left font-[inherit] text-white shadow-[0_12px_28px_rgba(140,29,82,0.22)] hover:brightness-105 sm:px-5">
-      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/[0.18] font-display text-base font-bold">#{a.queueNumber}</span>
-      <span className="min-w-0 flex-1">
-        <b className="block truncate text-[16px]">{a.patientName} · {a.serviceName}</b>
-        <span className="block truncate text-[13px] text-rose-tint">
-          {called ? t('dash.yourTurn') : `${t('dash.estimated')} ${clock(q.estimatedFrom)}–${clock(q.estimatedTo)}`}
-        </span>
-      </span>
-      {!called && (
-        <span className="shrink-0 text-right">
-          <span className="block font-display text-2xl font-bold leading-none">{q.ahead === 0 ? t('dash.youreNext') : ordinal(q.ahead + 1)}</span>
-          {q.ahead > 0 && <span className="text-xs text-rose-tint">~{q.waitMinutes} {t('dash.min')}</span>}
-        </span>
-      )}
-    </button>
-  )
-}
-
-function Ticket({ a, serving, t, onDetails }) {
+function Ticket({ a, serving, t, onDetails, compact = false }) {
   const q = a.queue
   const called = a.status === 'called'
   const checkedIn = a.status === 'checked_in'
   return (
-    <section aria-label={t('dash.liveQueue')} className="dash-in relative overflow-hidden rounded-[28px] bg-rose p-6 text-white shadow-[0_24px_50px_rgba(140,29,82,0.28)] sm:p-7">
+    <section aria-label={t('dash.liveQueue')} className={`dash-in relative min-w-0 overflow-hidden rounded-[28px] bg-rose text-white shadow-[0_24px_50px_rgba(140,29,82,0.28)] ${compact ? 'p-5' : 'p-6 sm:p-7'}`}>
       <div aria-hidden="true" className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-white/[0.06]" />
       <div aria-hidden="true" className="pointer-events-none absolute -bottom-24 right-24 h-48 w-48 rounded-full bg-white/[0.05]" />
 
@@ -169,9 +145,9 @@ function Ticket({ a, serving, t, onDetails }) {
         <span className="rounded-full bg-white/[0.18] px-3 py-1 font-display text-sm font-bold">#{a.queueNumber}</span>
       </div>
 
-      <div className="relative mt-4">
-        <div className="text-lg font-bold">{a.patientName} · {a.serviceName}</div>
-        <div className="mt-0.5 text-sm text-rose-tint">{a.departmentName}, {a.clinicName}</div>
+      <div className={`relative ${compact ? 'mt-3' : 'mt-4'}`}>
+        <div className={`truncate font-bold ${compact ? 'text-base' : 'text-lg'}`}>{a.patientName} · {a.serviceName}</div>
+        <div className="mt-0.5 truncate text-sm text-rose-tint">{a.departmentName}, {a.clinicName}</div>
       </div>
 
       {called ? (
@@ -180,16 +156,16 @@ function Ticket({ a, serving, t, onDetails }) {
           <div className="mt-2 text-base text-rose-tint">{t('dash.yourTurnBody')}</div>
         </div>
       ) : (
-        <div className="relative mt-6 flex items-end gap-8">
+        <div className={`relative flex items-end ${compact ? 'mt-4 gap-6' : 'mt-6 gap-8'}`}>
           <div>
-            <div className="font-display text-5xl font-extrabold leading-none">
+            <div className={`font-display font-extrabold leading-none ${compact ? 'text-4xl' : 'text-5xl'}`}>
               {q.ahead === 0 ? t('dash.youreNext') : <CountUp value={q.ahead + 1} format={ordinal} />}
             </div>
             {q.ahead > 0 && <div className="mt-1.5 text-sm text-rose-tint">{t('dash.inLine')}</div>}
           </div>
           {q.ahead > 0 && (
             <div>
-              <div className="font-display text-5xl font-extrabold leading-none">
+              <div className={`font-display font-extrabold leading-none ${compact ? 'text-4xl' : 'text-5xl'}`}>
                 <CountUp value={q.waitMinutes} /><span className="ml-1 text-lg">{t('dash.min')}</span>
               </div>
               <div className="mt-1.5 text-sm text-rose-tint">{t('dash.about')}</div>
@@ -198,7 +174,7 @@ function Ticket({ a, serving, t, onDetails }) {
         </div>
       )}
 
-      {!called && <QueueProgress a={a} serving={serving} t={t} />}
+      {!called && <QueueProgress a={a} serving={serving} t={t} compact={compact} />}
 
       {!called && q.delayMinutes >= 10 && (
         <div role="status" className="relative mt-4 rounded-2xl bg-white/[0.14] px-4 py-3 text-[15px]">
@@ -207,12 +183,12 @@ function Ticket({ a, serving, t, onDetails }) {
       )}
 
       {!called && (
-        <div className="relative mt-6 flex flex-wrap items-center justify-between gap-2.5 rounded-2xl bg-white px-4 py-3 text-plum-deep">
-          <span className="text-[15px] font-semibold">{t('dash.estimated')} <span className="whitespace-nowrap font-bold">{clock(q.estimatedFrom)}–{clock(q.estimatedTo)}</span></span>
+        <div className={`relative flex flex-wrap items-center justify-between gap-2.5 rounded-2xl bg-white px-4 text-plum-deep ${compact ? 'mt-4 py-2.5' : 'mt-6 py-3'}`}>
+          <span className={`font-semibold ${compact ? 'text-sm' : 'text-[15px]'}`}>{t('dash.estimated')} <span className="whitespace-nowrap font-bold">{clock(q.estimatedFrom)}–{clock(q.estimatedTo)}</span></span>
           {checkedIn && <span className="rounded-full bg-[#e9f7ee] px-3 py-1 text-xs font-bold text-[#1d6b3a]">{t('dash.checkedIn')}</span>}
         </div>
       )}
-      <div className="relative mt-4 flex items-center justify-between gap-3">
+      <div className={`relative flex items-center justify-between gap-3 ${compact ? 'mt-3' : 'mt-4'}`}>
         <span className="text-xs text-rose-tint">{t('dash.live')}</span>
         <button type="button" onClick={onDetails} className="cursor-pointer rounded-full border border-white/40 bg-white/10 px-3.5 py-1.5 text-[13px] font-semibold text-white hover:bg-white/20">{t('visit.title')}</button>
       </div>
@@ -391,13 +367,17 @@ export default function Home() {
         {data && (
           <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
             {/* Main column */}
-            <div className="flex flex-col gap-5">
+            <div className="flex min-w-0 flex-col gap-5">
               {live ? (
                 <>
                   {lives.length > 1 && <h2 className="dash-in m-0 text-lg font-bold">{fill(t('dash.todayVisits'), { n: lives.length })}</h2>}
                   {lives.length === 1
                     ? <Ticket a={lives[0]} serving={data.serving[lives[0].departmentId] ?? null} t={t} onDetails={() => setOpenVisit(lives[0])} />
-                    : lives.map((a) => <MiniTicket key={a.id} a={a} t={t} onDetails={() => setOpenVisit(a)} />)}
+                    : (
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        {lives.map((a) => <Ticket key={a.id} compact a={a} serving={data.serving[a.departmentId] ?? null} t={t} onDetails={() => setOpenVisit(a)} />)}
+                      </div>
+                    )}
                 </>
               ) : (
                 <section className="dash-in rounded-[28px] border-[1.5px] border-dashed border-rose-line bg-white/60 px-6 py-8 text-center">
