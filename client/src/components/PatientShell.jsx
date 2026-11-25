@@ -27,27 +27,23 @@ const Brand = ({ small = false }) => (
   </Link>
 )
 
-// The laptop side menu can shrink to icons only; the choice is remembered on this device.
-const readCollapsed = () => { try { return localStorage.getItem('oma_menu_small') === '1' } catch { return false } }
 
 export default function PatientShell({ children }) {
   const { t } = useT()
   const { logout } = useAuth()
-  const [small, setSmall] = useState(readCollapsed)
-  const toggle = () => setSmall((v) => {
-    try { localStorage.setItem('oma_menu_small', v ? '0' : '1') } catch { /* private mode */ }
-    return !v
-  })
+  // Laptop side menu: slim (icons only) until you hover over it or tab into it, then it opens
+  // over the page. It never pushes the page sideways.
+  const [open, setOpen] = useState(false)
+  const small = !open
   return (
     <div className="min-h-screen bg-cream lg:flex">
-      {/* Laptop: side menu that can shrink to icons */}
-      <aside className={`hidden overflow-hidden transition-[width] duration-300 ease-out motion-reduce:transition-none lg:sticky lg:top-0 lg:flex lg:h-screen lg:shrink-0 lg:flex-col lg:border-r lg:border-line lg:py-7 ${small ? 'lg:w-[84px] lg:px-3' : 'lg:w-[232px] lg:px-5'}`}>
-        <div className={`flex items-center ${small ? 'flex-col gap-4' : 'justify-between gap-2'}`}>
+      {/* Laptop: slim side menu that opens on hover */}
+      <div aria-hidden="true" className="hidden lg:block lg:w-[84px] lg:shrink-0" />
+      <aside onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}
+        onFocus={() => setOpen(true)} onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setOpen(false) }}
+        className={`hidden overflow-hidden bg-cream transition-[width,box-shadow] duration-200 ease-out motion-reduce:transition-none lg:fixed lg:left-0 lg:top-0 lg:z-30 lg:flex lg:h-screen lg:flex-col lg:border-r lg:border-line lg:py-7 ${small ? 'lg:w-[84px] lg:px-3' : 'lg:w-[232px] lg:px-5 lg:shadow-[12px_0_40px_rgba(34,18,28,0.12)]'}`}>
+        <div className={`flex h-10 items-center ${small ? 'justify-center' : ''}`}>
           <Brand small={small} />
-          <button type="button" onClick={toggle} aria-expanded={!small} aria-label={small ? t('menu.expand') : t('menu.collapse')} title={small ? t('menu.expand') : t('menu.collapse')}
-            className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-line bg-white text-muted hover:bg-blush hover:text-rose">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={`transition-transform duration-300 ${small ? 'rotate-180' : ''}`}><path d="M15 18l-6-6 6-6" /></svg>
-          </button>
         </div>
         <nav aria-label={t('menu.main')} className="mt-10 flex flex-col gap-1">
           {ALL.map(([key, to]) => (

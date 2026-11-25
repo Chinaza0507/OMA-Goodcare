@@ -76,10 +76,10 @@ export default function Profile() {
     <PatientShell>
       <div className="flex w-full max-w-xl flex-col gap-6">
         <Link to="/profile/edit" className="flex items-center gap-4 rounded-[24px] p-1 text-ink no-underline">
-          <Avatar seed={user.id} size={88} />
+          <Avatar seed={user.id} size={116} />
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[28px] font-semibold leading-tight">{user.name}</span>
-            <span className="text-[15px] font-semibold text-plum">{t('profile.view')} ›</span>
+            <span className="block truncate text-[32px] font-semibold leading-tight">{user.name}</span>
+            <span className="text-base font-semibold text-plum">{t('profile.view')} ›</span>
           </span>
         </Link>
 
