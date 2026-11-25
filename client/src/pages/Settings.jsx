@@ -5,6 +5,7 @@ import LangSwitch from '../components/LangSwitch.jsx'
 import { api } from '../api.js'
 import { THEMES, applyTheme, currentTheme } from '../lib/theme.js'
 import ConfirmBox from '../components/ConfirmBox.jsx'
+import AlertSound from '../components/AlertSound.jsx'
 import { Field, PinInput } from '../components/fields.jsx'
 import { useAuth } from '../auth.jsx'
 import { useT } from '../i18n/index.jsx'
@@ -89,6 +90,8 @@ export default function Settings() {
             {user.alertAhead === 1 ? t('settings.onePerson') : t('settings.people').replace('{n}', user.alertAhead)}
           </p>
         </section>
+
+        <AlertSound t={t} />
 
         <section className="rounded-[24px] bg-white p-5 ring-1 ring-line sm:p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
