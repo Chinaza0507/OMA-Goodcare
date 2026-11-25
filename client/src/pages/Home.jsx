@@ -1,3 +1,4 @@
+import Avatar from '../components/Avatar.jsx'
 import { showLive, showNotification } from '../lib/notify.js'
 import { isTurnClose } from '../lib/alertPref.js'
 import { getAlertSeconds, playAlert, stopAlert } from '../lib/sounds.js'
@@ -356,9 +357,14 @@ export default function Home() {
     <PatientShell>
       <div ref={scope} className="flex flex-col gap-6">
         <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h1 className="m-0 text-[24px] font-semibold leading-tight sm:text-[28px]">{greeting} {user.name.split(' ')[0]}</h1>
-            <TodayClock />
+          <div className="flex min-w-0 items-center gap-3.5">
+            <Link to="/profile" aria-label={t('profile.view')} className="shrink-0 rounded-full no-underline transition-transform hover:scale-105">
+              <Avatar seed={user.id} size={56} />
+            </Link>
+            <div className="min-w-0">
+              <h1 className="m-0 truncate text-[22px] font-semibold leading-tight sm:text-[26px]">{greeting} {user.name.split(' ')[0]}</h1>
+              <TodayClock />
+            </div>
           </div>
           <NotificationsBell items={notifications} t={t} />
         </div>
@@ -410,8 +416,6 @@ export default function Home() {
                 </Link>
               </div>
 
-              <NearbyHospitals t={t} />
-
               {later.length > 0 && (
                 <section className="dash-in rounded-[24px] bg-white p-5 shadow-[0_12px_30px_rgba(90,45,176,0.07)] ring-1 ring-line sm:p-6">
                   <h2 className="m-0 mb-4 text-xl font-bold">{live ? t('dash.upcoming') : t('dash.nextVisit')}</h2>
@@ -434,6 +438,8 @@ export default function Home() {
                   </ul>
                 </section>
               )}
+
+              <NearbyHospitals t={t} />
 
               <a href="tel:112" className="dash-in flex min-h-[80px] items-center gap-4 rounded-[22px] bg-[#c8102e] px-6 py-4 text-[18px] font-bold !text-white no-underline shadow-[0_12px_28px_rgba(200,16,46,0.28)] hover:bg-[#a00c24]">
                 <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/15">
