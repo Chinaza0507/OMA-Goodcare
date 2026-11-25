@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
 import PatientShell from '../components/PatientShell.jsx'
 import { api } from '../api.js'
+import { connectSocket } from '../lib/socket.js'
 import { useAuth } from '../auth.jsx'
 import { useT } from '../i18n/index.jsx'
 
@@ -92,16 +93,18 @@ export default function BookVisit() {
   }, [clinicId, user])
 
   // Free times for the chosen service on each booking day (up to 2 days ahead).
+  // A new service starts fresh; a live refresh keeps the chosen time if it is still free.
+  const [shownService, setShownService] = useState(null)
   useEffect(() => {
     if (!serviceId) return
     let live = true
-    setAvail(null)
-    setTime(null)
     api(`/services/${serviceId}/availability`)
       .then((d) => {
         if (!live) return
         setAvail(d)
+        setShownService(serviceId)
         setDate((cur) => (d.days.some((x) => x.date === cur && x.times.length) ? cur : d.days.find((x) => x.times.length)?.date ?? d.days[0]?.date ?? null))
+        setTime((cur) => (cur && d.days.some((x) => x.times.includes(cur)) ? cur : null))
       })
       .catch(() => { if (live) setAvail({ days: [] }) })
     return () => { live = false }
@@ -109,7 +112,18 @@ export default function BookVisit() {
 
   const dept = clinic?.departments.find((d) => d.services.some((sv) => sv.id === serviceId))
   const service = dept?.services.find((sv) => sv.id === serviceId)
-  const dayTimes = avail?.days.find((d) => d.date === date)?.times ?? null
+  const ready = avail && shownService === serviceId ? avail : null
+  const dayTimes = ready?.days.find((d) => d.date === date)?.times ?? null
+
+  // Live: when anyone books or cancels in this department, refresh the free times at once.
+  const deptId = dept?.id
+  useEffect(() => {
+    if (!deptId) return
+    const s = connectSocket()
+    s.on('connect', () => s.emit('join', { departmentId: deptId }))
+    s.on('queue:changed', () => setSlotsRefresh((n) => n + 1))
+    return () => s.disconnect()
+  }, [deptId])
   const member = family.find((m) => m.id === memberId)
   const deposit = clinic?.depositNaira ?? 0
   const lowKolo = kolo && deposit > 0 && kolo.available < deposit
@@ -206,14 +220,14 @@ export default function BookVisit() {
             <div className="step-in">
               <h2 className="m-0 text-base font-bold">{t('bookPage.when')}</h2>
               <p className="m-0 mb-3 mt-1 text-sm text-muted">{t('bookPage.whenHelp')}</p>
-              {avail === null ? (
+              {ready === null ? (
                 <p className="m-0 text-sm text-muted">{t('bookPage.loadingTimes')}</p>
-              ) : avail.days.length === 0 ? (
+              ) : ready.days.length === 0 ? (
                 <p className="m-0 rounded-2xl border border-dashed border-line p-5 text-center text-sm text-muted">{t('bookPage.noDays')}</p>
               ) : (
                 <>
                   <div className="mb-4 flex flex-wrap gap-2">
-                    {avail.days.map((d) => {
+                    {ready.days.map((d) => {
                       const p = dayParts(d.date)
                       const full = d.times.length === 0
                       return (
@@ -225,6 +239,9 @@ export default function BookVisit() {
                       )
                     })}
                   </div>
+                  {dayTimes && dayTimes.length > 0 && (
+                    <p className="m-0 mb-2.5 text-sm font-semibold text-plum">{t('bookPage.nextFree').replace('{time}', clock(dayTimes[0])).replace('{n}', service.minutes)}</p>
+                  )}
                   {dayTimes && dayTimes.length > 0 ? (
                     <div className="grid max-h-[260px] grid-cols-3 gap-2 overflow-y-auto pr-1 sm:grid-cols-5">
                       {dayTimes.map((s) => (

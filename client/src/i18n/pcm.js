@@ -460,6 +460,7 @@ export default {
     whenHelp: 'You fit book reach 2 days before, for the days wey this department dey take booking.',
     bookingDays: 'Online booking: {days} · {from}–{to}',
     noDays: 'No booking day for the next 2 days. Check back soon.',
+    nextFree: 'Next free time: {time} · each visit na {n} min',
     dayFull: 'E don full',
     change: 'Change am',
     time: 'Time to reach',
