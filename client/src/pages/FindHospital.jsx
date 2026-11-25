@@ -27,6 +27,7 @@ export default function FindHospital() {
   const [q, setQ] = useState('')
   const [state, setState] = useState('')
   const [area, setArea] = useState('')
+  const [service, setService] = useState('')
   const [error, setError] = useState(false)
   const scope = useRef(null)
 
@@ -55,13 +56,18 @@ export default function FindHospital() {
 
   const states = useMemo(() => [...new Set(places.map((p) => p.state))], [places])
   const areas = useMemo(() => places.filter((p) => !state || p.state === state).map((p) => p.area).filter(Boolean), [places, state])
+  // Every service offered by the hospitals in the list, for the "Any service" dropdown.
+  const services = useMemo(() => [...new Set((clinics ?? []).flatMap((c) => c.departments.flatMap((d) => d.services.map((sv) => sv.name))))]
+    .sort((a, b) => a.localeCompare(b)), [clinics])
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase()
-    if (!clinics || !needle) return clinics
+    const offers = (c) => !service || c.departments.some((d) => d.services.some((sv) => sv.name === service))
+    if (!clinics) return clinics
+    if (!needle) return clinics.filter(offers)
     // Search by hospital, place, or what you need (e.g. "braces", "eye test").
-    return clinics.filter((c) => [c.name, c.area, c.state, c.address, c.landmark, ...c.departments.flatMap((d) => [d.name, ...d.services.map((s) => s.name)])]
+    return clinics.filter(offers).filter((c) => [c.name, c.area, c.state, c.address, c.landmark, ...c.departments.flatMap((d) => [d.name, ...d.services.map((s) => s.name)])]
       .some((v) => v?.toLowerCase().includes(needle)))
-  }, [clinics, q])
+  }, [clinics, q, service])
 
   useGSAP(() => {
     if (!shown?.length || document.hidden) return
@@ -103,7 +109,14 @@ export default function FindHospital() {
                 className="min-h-12 w-full rounded-[14px] border-[1.5px] border-line bg-white pl-10 pr-3 text-base text-ink" />
             </label>
           </div>
-          <div className="grid grid-cols-2 gap-3 lg:max-w-md">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:max-w-2xl">
+            <label className="col-span-2 sm:col-span-1">
+              <span className="sr-only">{t('find.service')}</span>
+              <select value={service} onChange={(e) => setService(e.target.value)} className={select}>
+                <option value="">{t('find.anyService')}</option>
+                {services.map((sv) => <option key={sv} value={sv}>{sv}</option>)}
+              </select>
+            </label>
             <label>
               <span className="sr-only">{t('find.state')}</span>
               <select value={state} onChange={(e) => { setState(e.target.value); setArea('') }} className={select}>

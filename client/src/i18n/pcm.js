@@ -280,6 +280,8 @@ export default {
     open: 'Open settings',
   },
   find: {
+    anyService: 'Any service',
+    service: 'Service',
     title: 'Find hospital',
     sub: 'See hospital wey near you, their department and price, then book time.',
     nearTitle: 'Hospital wey near you',
