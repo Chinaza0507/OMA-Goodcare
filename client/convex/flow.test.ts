@@ -86,36 +86,28 @@ describe('services and booking days', () => {
     expect(c.departments[0].services.map((s) => s.name)).toEqual(['Check-up', 'Cleaning'])
   })
 
-  test('a service fills its full length: overlapping times are not offered', async () => {
+  test('standard 35-minute blocks; a longer booking shifts every block after it', async () => {
     const { t, cleaning, desk, deptId } = await setup()
+    const day = async (sv: string) => (await t.query(api.patient.availability, { serviceId: sv })).days.find((d) => d.date === DAY)!.times
+    // Opens 08:00, now 09:00: the chain is 09:10, 09:45, 10:20, 10:55, 11:30, 12:05, 12:40, 13:15…
+    expect((await day(cleaning)).slice(0, 4)).toEqual(['09:10', '09:45', '10:20', '10:55'])
     const a = await patient(t, '08033333333')
-    await book(t, a, cleaning, '10:00')
-    const day = (await t.query(api.patient.availability, { serviceId: cleaning })).days.find((d) => d.date === DAY)!
-    expect(day.times).not.toContain('10:00')
-    expect(day.times).toContain('10:30')
-    expect(day.times.every((x) => x.endsWith(':00') || x.endsWith(':30'))).toBe(true) // 30-minute steps
+    await book(t, a, cleaning, '10:20') // a 30-min cleaning still holds the 35-min block
+    expect(await day(cleaning)).not.toContain('10:20')
+    expect(await day(cleaning)).toContain('10:55') // chain unchanged
     const b = await patient(t, '08034444444')
-    expect(await code(book(t, b, cleaning, '10:15'))).toBe('slot_taken')
-    // A 60-minute service holds the whole hour: after braces at 12:00, 12:30 is not free.
+    expect(await code(book(t, b, cleaning, '10:20'))).toBe('slot_taken')
+    expect(await code(book(t, b, cleaning, '10:40'))).toBe('slot_taken') // not a block start
+    // Braces (60 min) at 12:05 holds 12:05–13:05, so the blocks after it shift to 13:05, 13:40…
     await t.mutation(api.hospital.addService, { token: desk, departmentId: deptId, name: 'Braces', minutes: 60, price: null })
     const braces = (await t.query(api.hospital.managerClinic, { token: desk })).departments[0].services.find((x) => x.name === 'Braces')!.id
-    await book(t, b, braces, '12:00')
-    const after = (await t.query(api.patient.availability, { serviceId: cleaning })).days.find((d) => d.date === DAY)!.times
-    expect(after).not.toContain('12:00')
-    expect(after).not.toContain('12:30')
-    expect(after).toContain('13:00')
-    // A 75-minute service is offered in 75-minute blocks from opening (8:00, 9:15, 10:30, …, 14:15).
-    // Booked 14:15–15:30: the next cleaning block offered starts exactly at 15:30.
-    await t.mutation(api.hospital.addService, { token: desk, departmentId: deptId, name: 'Long braces', minutes: 75, price: null })
-    const long = (await t.query(api.hospital.managerClinic, { token: desk })).departments[0].services.find((x) => x.name === 'Long braces')!.id
-    const longTimes = (await t.query(api.patient.availability, { serviceId: long })).days.find((d) => d.date === DAY)!.times
-    expect(longTimes).toContain('14:15')
-    expect(longTimes).not.toContain('14:00')
-    const c = await patient(t, '08034444445')
-    await book(t, c, long, '14:15')
-    const later = (await t.query(api.patient.availability, { serviceId: cleaning })).days.find((d) => d.date === DAY)!.times
-    expect(later).not.toContain('15:00')
-    expect(later).toContain('15:30')
+    await book(t, b, braces, '12:05')
+    const after = await day(cleaning)
+    expect(after).not.toContain('12:05')
+    expect(after).not.toContain('12:40')
+    expect(after).not.toContain('13:15')
+    expect(after).toContain('13:05')
+    expect(after).toContain('13:40')
   })
 
   test('book up to 2 days ahead, and only on booking days', async () => {
@@ -123,27 +115,27 @@ describe('services and booking days', () => {
     const a = await patient(t, '08035555555', 2000)
     const days = (await t.query(api.patient.availability, { serviceId: cleaning })).days.map((d) => d.date)
     expect(days).toEqual(['2026-03-10', '2026-03-12']) // Tue (today) and Thu; Wed is not a booking day
-    expect((await book(t, a, cleaning, '11:00', '2026-03-12')).appointment.date).toBe('2026-03-12')
-    expect(await code(book(t, a, cleaning, '11:00', '2026-03-11'))).toBe('invalid_date') // Wednesday
-    expect(await code(book(t, a, cleaning, '11:00', '2026-03-17'))).toBe('invalid_date') // too far ahead
+    expect((await book(t, a, cleaning, '11:30', '2026-03-12')).appointment.date).toBe('2026-03-12')
+    expect(await code(book(t, a, cleaning, '11:30', '2026-03-11'))).toBe('invalid_date') // Wednesday
+    expect(await code(book(t, a, cleaning, '11:30', '2026-03-17'))).toBe('invalid_date') // too far ahead
   })
 
   test('booking holds ₦300; not enough Kolo keeps nothing', async () => {
     const { t, cleaning } = await setup()
     const a = await patient(t, '08036666666')
-    await book(t, a, cleaning, '10:00')
+    await book(t, a, cleaning, '10:20')
     expect(await t.query(api.patient.kolo, { token: a.token })).toMatchObject({ available: 700, reserved: 300 })
     const broke = await patient(t, '08036666667', 0)
-    expect(await code(book(t, broke, cleaning, '11:00'))).toBe('kolo_low')
+    expect(await code(book(t, broke, cleaning, '11:30'))).toBe('kolo_low')
     expect((await t.query(api.patient.visits, { token: broke.token })).appointments).toHaveLength(0)
   })
 
   test('early cancel returns the deposit; late cancel needs confirmation and forfeits it', async () => {
     const { t, cleaning } = await setup()
     const a = await patient(t, '08037777777')
-    const early = await book(t, a, cleaning, '14:00')
+    const early = await book(t, a, cleaning, '13:50')
     expect((await t.mutation(api.patient.cancelVisit, { token: a.token, id: early.appointment.id })).depositStatus).toBe('returned')
-    const late = await book(t, a, cleaning, '10:00')
+    const late = await book(t, a, cleaning, '10:20')
     expect(await code(t.mutation(api.patient.cancelVisit, { token: a.token, id: late.appointment.id }))).toBe('needs_confirmation')
     expect((await t.mutation(api.patient.cancelVisit, { token: a.token, id: late.appointment.id, confirm: true })).depositStatus).toBe('forfeited')
   })
@@ -154,13 +146,13 @@ describe('honest wait times', () => {
     const { t, desk, cleaning } = await setup()
     const a = await patient(t, '08038000001')
     const b = await patient(t, '08038000002')
-    const first = await book(t, a, cleaning, '09:30')
-    const second = await book(t, b, cleaning, '10:30')
+    const first = await book(t, a, cleaning, '09:45')
+    const second = await book(t, b, cleaning, '10:20')
     await t.mutation(api.hospital.checkIn, { token: desk, id: first.appointment.id })
-    vi.setSystemTime(at('10:15'))
-    await t.mutation(api.hospital.call, { token: desk, id: first.appointment.id }) // started 45 min late
+    vi.setSystemTime(at('10:05'))
+    await t.mutation(api.hospital.call, { token: desk, id: first.appointment.id }) // started 20 min late
     const q = (await t.query(api.patient.visit, { token: b.token, id: second.appointment.id })).appointment.queue!
-    expect(q.estimatedFrom).toBe('10:45') // 10:15 + 30 min cleaning
+    expect(q.estimatedFrom).toBe('10:35') // 10:05 + 30 min cleaning
     expect(q.delayMinutes).toBe(15)
   })
 })
@@ -170,12 +162,12 @@ describe('wait estimate ignores no-shows in waiting', () => {
     const { t, cleaning } = await setup()
     const a = await patient(t, '08038000011')
     const b = await patient(t, '08038000012')
-    await book(t, a, cleaning, '09:30') // never arrives
-    const second = await book(t, b, cleaning, '10:00')
-    vi.setSystemTime(at('09:50'))
+    await book(t, a, cleaning, '09:45') // never arrives
+    const second = await book(t, b, cleaning, '10:20')
+    vi.setSystemTime(at('10:05'))
     const q = (await t.query(api.patient.visit, { token: b.token, id: second.appointment.id })).appointment.queue!
     expect(q.ahead).toBe(0)
-    expect(q.estimatedFrom).toBe('10:00')
+    expect(q.estimatedFrom).toBe('10:20')
     expect(q.delayMinutes).toBe(0)
   })
 })
@@ -184,13 +176,13 @@ describe('front desk', () => {
   test('arrive, call next, seen: deposit goes to the fee; free service returns it', async () => {
     const { t, desk, deptId, cleaning, checkup } = await setup()
     const a = await patient(t, '08038888888')
-    const r = await book(t, a, cleaning, '09:30')
+    const r = await book(t, a, cleaning, '09:45')
     expect(await code(t.mutation(api.hospital.callNext, { token: desk, departmentId: deptId }))).toBe('nobody_waiting')
     await t.mutation(api.hospital.checkIn, { token: desk, id: r.appointment.id })
     expect((await t.mutation(api.hospital.callNext, { token: desk, departmentId: deptId })).queueNumber).toBe(1)
     expect((await t.mutation(api.hospital.seen, { token: desk, id: r.appointment.id })).depositStatus).toBe('deducted')
     const b = await patient(t, '08038888889')
-    const free = await book(t, b, checkup, '10:00')
+    const free = await book(t, b, checkup, '10:20')
     await t.mutation(api.hospital.call, { token: desk, id: free.appointment.id })
     expect((await t.mutation(api.hospital.seen, { token: desk, id: free.appointment.id })).depositStatus).toBe('returned')
   })
@@ -198,7 +190,7 @@ describe('front desk', () => {
   test('no-show only after the grace time', async () => {
     const { t, desk, cleaning } = await setup()
     const a = await patient(t, '08039000001')
-    const r = await book(t, a, cleaning, '09:30')
+    const r = await book(t, a, cleaning, '09:45')
     await t.mutation(api.hospital.call, { token: desk, id: r.appointment.id })
     expect(await code(t.mutation(api.hospital.noShow, { token: desk, id: r.appointment.id }))).toBe('grace_not_ended')
     vi.setSystemTime(at('09:11'))
@@ -208,7 +200,7 @@ describe('front desk', () => {
   test("walk-ins are logged for the day but never enter the booking line", async () => {
     const { t, desk, deptId, cleaning, clinicId } = await setup()
     const a = await patient(t, '08039000006')
-    const r = await book(t, a, cleaning, '09:30')
+    const r = await book(t, a, cleaning, '09:45')
     const w = (await t.mutation(api.hospital.addWalkIn, { token: desk, departmentId: deptId, name: 'Baba Musa' })).walkIn
     expect(w.number).toBe(1)
     await t.mutation(api.hospital.setWalkInStatus, { token: desk, id: w.id, status: 'seen' })
@@ -225,8 +217,8 @@ describe('front desk', () => {
     const { t, desk, deptId, cleaning } = await setup()
     const a = await patient(t, '08039000002')
     const b = await patient(t, '08039000003')
-    const r1 = await book(t, a, cleaning, '09:30')
-    const r2 = await book(t, b, cleaning, '10:30')
+    const r1 = await book(t, a, cleaning, '09:45')
+    const r2 = await book(t, b, cleaning, '10:20')
     await t.mutation(api.hospital.checkIn, { token: desk, id: r1.appointment.id })
     await t.mutation(api.hospital.checkIn, { token: desk, id: r2.appointment.id })
     await t.mutation(api.hospital.moveToFront, { token: desk, id: r2.appointment.id, reason: 'High fever' })
@@ -236,7 +228,7 @@ describe('front desk', () => {
   test('cancel a day returns every deposit', async () => {
     const { t, desk, cleaning } = await setup()
     const a = await patient(t, '08039000004')
-    await book(t, a, cleaning, '11:00', '2026-03-11')
+    await book(t, a, cleaning, '11:30', '2026-03-11')
     expect((await t.mutation(api.hospital.cancelDay, { token: desk, date: '2026-03-11', reason: 'Doctor away' })).cancelled).toBe(1)
     expect(await t.query(api.patient.kolo, { token: a.token })).toMatchObject({ available: 1000, reserved: 0 })
   })
@@ -244,7 +236,7 @@ describe('front desk', () => {
   test("a hospital cannot touch another hospital's patients", async () => {
     const { t, cleaning } = await setup()
     const a = await patient(t, '08039000005')
-    const r = await book(t, a, cleaning, '11:00')
+    const r = await book(t, a, cleaning, '11:30')
     const other = await t.mutation(api.patient.registerHospital, {
       hospitalName: 'Other Clinic', type: 'eye', state: 'Lagos', area: 'Ikeja', address: '2 Road', email: 'other@test.ng', password: 'other-pass-1',
     })
@@ -258,12 +250,12 @@ describe('school clinic rule', () => {
     const s = await patient(t, '08039000009', 0)
     for (const day of [DAY, '2026-03-11']) {
       vi.setSystemTime(at('09:00', day))
-      const r = await book(t, s, cleaning, '09:30', day)
+      const r = await book(t, s, cleaning, '09:45', day)
       expect(r.appointment.deposit.status).toBe('none')
       await t.mutation(api.hospital.call, { token: desk, id: r.appointment.id })
       vi.setSystemTime(at('09:11', day))
       await t.mutation(api.hospital.noShow, { token: desk, id: r.appointment.id })
     }
-    expect(await code(book(t, s, checkup, '13:00', '2026-03-12'))).toBe('booking_blocked')
+    expect(await code(book(t, s, checkup, '13:15', '2026-03-12'))).toBe('booking_blocked')
   })
 })

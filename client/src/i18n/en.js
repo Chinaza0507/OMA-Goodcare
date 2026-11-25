@@ -468,7 +468,7 @@ export default {
     whenHelp: 'You can book up to 2 days ahead, on the days this department takes bookings.',
     bookingDays: 'Online booking: {days} · {from}–{to}',
     noDays: 'No booking days in the next 2 days. Check back soon.',
-    blocks: '{service} takes {n} min, so each time below is a {n}-minute block.',
+    blocks: '{service} takes about {n} min. Times move along if someone before you needs longer.',
     nextFree: 'Next free: {time} · each visit takes {n} min',
     dayFull: 'Full',
     change: 'Change',

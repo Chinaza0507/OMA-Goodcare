@@ -125,22 +125,34 @@ export function bookingDates(dept: Doc<'departments'>, today = todayLagos()) {
   return out
 }
 
-// Bookable blocks for a service on a day. Each block is as long as the service (braces 60 min:
-// 9:00–10:00, 10:00–11:00…), starting from the department's booking hours, plus a block right after
-// each existing booking ends so no time is wasted. A block is free only if nothing overlaps it,
-// so while someone is booked 6:00–7:00 nothing else can start before 7:00.
+// The booking day is a chain of standard 35-minute blocks from the department's booking hours:
+// 7:00, 7:35, 8:10… A booking holds its block, or longer if the service is longer — braces (60 min)
+// booked at 7:00 holds 7:00–8:00, and every block after it shifts: 8:00, 8:35, 9:10…
+// A patient can start where the chain lands and their service (at least one block) fits before the
+// next booking or closing time.
+export const STANDARD_MINUTES = 35
+const holds = (minutes: number) => Math.max(minutes, STANDARD_MINUTES)
+
 export function freeTimes(dept: Doc<'departments'>, minutes: number, date: string, booked: Doc<'appointments'>[]) {
-  const busy = booked.filter((a) => a.status !== 'cancelled').map((a) => [toMinutes(a.time), toMinutes(a.time) + a.minutes])
-  const open = toMinutes(dept.opensAt)
+  const busy = booked
+    .filter((a) => a.status !== 'cancelled')
+    .map((a) => [toMinutes(a.time), toMinutes(a.time) + holds(a.minutes)])
+    .sort((x, y) => x[0] - y[0])
   const close = toMinutes(dept.closesAt)
   const earliest = date === todayLagos() ? nowMinutesLagos() : 0
-  const starts = new Set<number>()
-  for (let t = open; t + minutes <= close; t += minutes) starts.add(t)
-  for (const [, end] of busy) if (end >= open) starts.add(end)
-  return [...starts]
-    .sort((x, y) => x - y)
-    .filter((t) => t >= earliest && t + minutes <= close && !busy.some(([s, e]) => t < e && s < t + minutes))
-    .map(fromMinutes)
+  const need = holds(minutes)
+  const out: string[] = []
+  let t = toMinutes(dept.opensAt)
+  while (t < close) {
+    const inside = busy.find(([s, e]) => s <= t && t < e)
+    if (inside) { t = inside[1]; continue } // a booking is running: the chain resumes when it ends
+    const next = busy.find(([s]) => s > t)
+    const limit = next ? next[0] : close
+    if (t + need <= limit && t + minutes <= close && t >= earliest) out.push(fromMinutes(t))
+    // Step one block; if that would run into the next booking, jump to the booking.
+    t = next && t + STANDARD_MINUTES > next[0] ? next[0] : t + STANDARD_MINUTES
+  }
+  return out
 }
 
 export async function loadBookableService(ctx: QueryCtx, serviceId: Id<'services'>) {
