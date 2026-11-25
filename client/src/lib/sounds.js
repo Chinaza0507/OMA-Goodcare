@@ -114,3 +114,21 @@ export function playTone(name = getTone()) {
     setTimeout(() => ctx.close(), 2500)
   } catch { /* sound not available */ }
 }
+
+// The real alert: repeat the chosen tone for 30 seconds (or until stopped).
+let stopCurrent = null
+export function playAlert(name = getTone(), seconds = 30) {
+  stopAlert()
+  let ctx
+  try { ctx = new (window.AudioContext || window.webkitAudioContext)() } catch { return }
+  const tone = TONES[name] ?? TONES.chime
+  const gap = 1.4 // seconds between repeats
+  const start = ctx.currentTime + 0.02
+  for (let t = 0; t < seconds; t += gap) tone.play(ctx, start + t)
+  const timer = setTimeout(() => stopAlert(), (seconds + 1.5) * 1000)
+  stopCurrent = () => { clearTimeout(timer); ctx.close().catch(() => {}) }
+}
+export function stopAlert() {
+  if (stopCurrent) { stopCurrent(); stopCurrent = null }
+}
+export const alertPlaying = () => stopCurrent !== null

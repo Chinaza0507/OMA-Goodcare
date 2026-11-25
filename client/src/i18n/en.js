@@ -95,6 +95,7 @@ export default {
   home: { hello: 'Hello', soon: 'Your dashboard is coming soon.', logout: 'Log out' },
   menu: { home: 'Home', book: 'Book', kolo: 'Kolo', family: 'Family', account: 'Profile', main: 'Main menu', settings: 'Settings', collapse: 'Shrink menu', expand: 'Expand menu' },
   dash: {
+    stopSound: 'Stop sound',
     runningLate: 'The doctor is running about {n} min late. Your time has moved to {time}.',
     onTime: 'On time',
     morning: 'Good morning,',
@@ -351,7 +352,7 @@ export default {
     view: 'View profile',
     notify: 'Notifications',
     tone: 'Alert sound',
-    toneHelp: 'Tap one to hear it. It plays when your turn is close.',
+    toneHelp: 'Tap one to hear it. When your turn is close it plays for 30 seconds.',
     phoneNotify: 'Phone notifications',
     live: 'Live queue updates',
     liveSub: 'Keep your place in line showing in a notification while ỌMA is open.',

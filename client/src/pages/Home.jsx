@@ -1,5 +1,5 @@
 import { showLive, showNotification } from '../lib/notify.js'
-import { playTone } from '../lib/sounds.js'
+import { playAlert, stopAlert } from '../lib/sounds.js'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { connectSocket, pollEvery } from '../lib/socket.js'
@@ -86,7 +86,7 @@ function CountUp({ value, format = (n) => n }) {
 function nudge() {
   // Browsers only allow vibration after the person has tapped the page.
   try { if (navigator.userActivation?.hasBeenActive) navigator.vibrate?.([200, 100, 200]) } catch { /* not supported */ }
-  playTone()
+  playAlert() // plays for 30 seconds; "Stop sound" on the banner ends it early
 }
 
 // Progress along today's queue: from "Now serving" to your number.
@@ -239,6 +239,8 @@ export default function Home() {
     return () => { socket.disconnect(); clearInterval(poll) }
   }, [liveDept, load])
 
+  useEffect(() => () => stopAlert(), [])
+  const [ringing, setRinging] = useState(false)
   const turnClose = live && live.queue.alertNow && live.status !== 'called'
   // Live queue updates (if turned on in Profile): keep one notification showing your place.
   const liveKey = live ? `${live.status}:${live.queue.ahead}:${live.queue.estimatedFrom}` : ''
@@ -252,6 +254,8 @@ export default function Home() {
     if ((turnClose || live?.status === 'called') && !alerted.current.has(`${live.id}:${live.status}`)) {
       alerted.current.add(`${live.id}:${live.status}`)
       nudge()
+      setRinging(true)
+      setTimeout(() => setRinging(false), 31_000)
       if (live.status === 'called') showNotification(t('notif.yourTurn'), fill(t('notif.yourTurnBody'), { name: live.patientName }))
       else showNotification(t('notif.turnClose'), fill(t('notif.turnCloseBody'), { name: live.patientName, dept: live.departmentName }))
     }
@@ -316,7 +320,10 @@ export default function Home() {
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-rose text-white">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10 21a2 2 0 0 0 4 0" /></svg>
             </span>
-            <span><b className="block text-[16px]">{t('dash.turnClose')}</b><span className="text-sm text-ink">{t('dash.turnCloseBody')}</span></span>
+            <span className="flex-1"><b className="block text-[16px]">{t('dash.turnClose')}</b><span className="text-sm text-ink">{t('dash.turnCloseBody')}</span></span>
+            {ringing && (
+              <button type="button" onClick={() => { stopAlert(); setRinging(false) }} className="min-h-10 shrink-0 cursor-pointer rounded-xl border-0 bg-rose px-3.5 text-sm font-bold text-white hover:bg-rose-dark">{t('dash.stopSound')}</button>
+            )}
           </div>
         )}
 

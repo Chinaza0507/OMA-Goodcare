@@ -95,6 +95,7 @@ export default {
   home: { hello: 'Hello', soon: 'Your dashboard dey come soon.', logout: 'Log out' },
   menu: { home: 'Home', book: 'Book', kolo: 'Kolo', family: 'Family', account: 'Profile', main: 'Main menu', settings: 'Settings', collapse: 'Make menu small', expand: 'Open menu wide' },
   dash: {
+    stopSound: 'Stop the sound',
     runningLate: 'Doctor dey late reach {n} min. Your time don move go {time}.',
     onTime: 'E dey on time',
     morning: 'Good morning o,',
@@ -351,7 +352,7 @@ export default {
     view: 'See your profile',
     notify: 'Notifications',
     tone: 'Alert sound',
-    toneHelp: 'Tap one make you hear am. E go play when your turn don near.',
+    toneHelp: 'Tap one make you hear am. When your turn don near, e go play for 30 seconds.',
     phoneNotify: 'Phone notifications',
     live: 'Live queue updates',
     liveSub: 'Make your place for line dey show for notification while ỌMA dey open.',
