@@ -8,7 +8,7 @@ export const LAGOS_AREAS = [
 // Common services patients look for. Hospitals can name their own too.
 export const COMMON_SERVICES = [
   'General consultation', 'Check-up', 'Blood pressure check', 'Blood test', 'Malaria test', 'Typhoid test',
-  'Immunisation', 'Child check-up', 'Postnatal visit', 'Family planning', 'Ultrasound scan',
+  'Immunisation', 'Child check-up', 'Family planning', 'Ultrasound scan',
   'X-ray', 'ECG', 'Physiotherapy', 'Dermatology (skin)', 'ENT (ear, nose, throat)', 'Mental health consultation',
   'Teeth cleaning', 'Tooth filling', 'Tooth extraction', 'Root canal', 'Braces fitting', 'Braces adjustment', 'Teeth whitening',
   'Eye test', 'Glasses fitting', 'Contact lens fitting', 'Eye pressure test',
