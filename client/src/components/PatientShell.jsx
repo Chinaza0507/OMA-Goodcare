@@ -71,7 +71,7 @@ export default function PatientShell({ children }) {
       {/* Phone: top bar */}
       <header className="flex items-center justify-between px-5 pb-2 pt-4 lg:hidden"><Brand /></header>
 
-      <main className="mx-auto w-full max-w-[1120px] flex-1 px-5 pb-28 pt-2 lg:px-10 lg:pb-12 lg:pt-10">{children}</main>
+      <main className="mx-auto w-full max-w-[1120px] flex-1 px-5 pb-24 pt-2 lg:px-10 lg:pb-10 lg:pt-10">{children}</main>
 
       {/* Phone: bottom tabs */}
       <nav aria-label={t('menu.main')} className="fixed inset-x-0 bottom-0 z-20 grid h-[72px] grid-cols-4 border-t border-line bg-cream/95 backdrop-blur lg:hidden">

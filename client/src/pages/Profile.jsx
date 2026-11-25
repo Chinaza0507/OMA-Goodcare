@@ -55,10 +55,10 @@ function NotifySection({ t }) {
       <div className="flex flex-col gap-4 pb-4 pl-[38px] pr-1">
         <div>
           <span className="text-sm font-semibold">{t('profile.tone')}</span>
-          <div className="mt-2 flex flex-wrap gap-2">
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
             {Object.entries(TONES).map(([key, v]) => (
               <button key={key} type="button" aria-pressed={tone === key} onClick={() => { setTone(key); setToneState(key); playTone(key) }}
-                className={`flex min-h-10 cursor-pointer items-center gap-1.5 rounded-xl border-[1.5px] px-3 text-sm font-semibold ${tone === key ? 'border-plum bg-plum text-white' : 'border-line bg-white text-ink hover:border-plum-soft'}`}>
+                className={`flex min-h-11 cursor-pointer items-center gap-1.5 rounded-xl border-[1.5px] px-3 text-left text-sm font-semibold ${tone === key ? 'border-plum bg-plum text-white' : 'border-line bg-white text-ink hover:border-plum-soft'}`}>
                 <span aria-hidden="true">♪</span>{v.label}
               </button>
             ))}
@@ -90,9 +90,9 @@ export default function Profile() {
     <PatientShell>
       <div className="flex w-full max-w-xl flex-col gap-6">
         <Link to="/profile/edit" className="flex items-center gap-4 rounded-[24px] p-1 text-ink no-underline">
-          <Avatar seed={user.id} size={68} />
+          <Avatar seed={user.id} size={88} />
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[24px] font-semibold leading-tight">{user.name}</span>
+            <span className="block truncate text-[28px] font-semibold leading-tight">{user.name}</span>
             <span className="text-[15px] font-semibold text-plum">{t('profile.view')} ›</span>
           </span>
         </Link>
