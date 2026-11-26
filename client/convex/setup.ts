@@ -2,7 +2,7 @@
 //   npx convex run setup:createAdmin '{"name":"Your Name","email":"you@example.com","password":"…"}'
 import { v } from 'convex/values'
 import { internalMutation } from './_generated/server'
-import { cleanEmail, fail, hashSecret, text } from './lib/core'
+import { cleanEmail, fail, fromMinutes, hashSecret, text, toMinutes, todayLagos, queueChanged } from './lib/core'
 
 export const createAdmin = internalMutation({
   args: { name: v.string(), email: v.string(), password: v.string() },
@@ -133,5 +133,54 @@ export const removeDemo = internalMutation({
       await ctx.db.delete(c._id)
     }
     return `Removed ${demos.length} demo hospital(s).`
+  },
+})
+
+// Fills a demo hospital's queue with made-up patients so the front desk page can be shown busy.
+//   npx convex run setup:seedDemoQueue '{"email":"desk@stgrace-mission.demo"}'
+// Running it again replaces that day's made-up queue. Only works on demo hospitals.
+const DEMO_NAMES = [
+  'Adaeze Okafor', 'Tunde Bakare', 'Ngozi Eze', 'Ibrahim Musa', 'Funmi Adeyemi', 'Chinedu Obi',
+  'Halima Bello', 'Segun Ajayi', 'Amaka Nwosu', 'Kemi Oladipo', 'Emeka Uche', 'Zainab Yusuf',
+]
+export const seedDemoQueue = internalMutation({
+  args: { email: v.string(), date: v.optional(v.string()) },
+  handler: async (ctx, a) => {
+    const manager = (await ctx.db.query('users').withIndex('by_email', (q) => q.eq('email', cleanEmail(a.email))).collect()).find((u) => u.role === 'manager')
+    const clinic = manager?.clinicId ? await ctx.db.get(manager.clinicId) : null
+    if (!manager || !clinic || !clinic.demo) fail('not_found')
+    const date = a.date ?? todayLagos()
+    for (const old of await ctx.db.query('appointments').withIndex('by_clinic_date', (q) => q.eq('clinicId', clinic!._id).eq('date', date)).collect()) await ctx.db.delete(old._id)
+    for (const old of await ctx.db.query('walkIns').withIndex('by_clinic_date', (q) => q.eq('clinicId', clinic!._id).eq('date', date)).collect()) await ctx.db.delete(old._id)
+
+    const now = Date.now()
+    // seen, with the doctor, three waiting, four not arrived yet
+    const plan = ['seen', 'seen', 'called', 'checked_in', 'checked_in', 'checked_in', 'booked', 'booked', 'booked', 'booked'] as const
+    let n = 0
+    for (const dept of await ctx.db.query('departments').withIndex('by_clinic', (q) => q.eq('clinicId', clinic!._id)).collect()) {
+      const services = (await ctx.db.query('services').withIndex('by_clinic', (q) => q.eq('clinicId', clinic!._id)).collect()).filter((s) => s.departmentId === dept._id && s.active)
+      if (!services.length) continue
+      let t = toMinutes(dept.opensAt)
+      for (let i = 0; i < plan.length && t < toMinutes(dept.closesAt); i++) {
+        const sv = services[i % services.length]
+        const status = plan[i]
+        const ago = (plan.length - i) * 12 * 60_000
+        await ctx.db.insert('appointments', {
+          clinicId: clinic!._id, departmentId: dept._id, serviceId: sv._id, serviceName: sv.name, minutes: sv.minutes,
+          bookedBy: manager!._id, patientName: DEMO_NAMES[n++ % DEMO_NAMES.length], date, time: fromMinutes(t),
+          queueNumber: i + 1, status, depositNaira: 0, depositStatus: 'none', frontRank: 0, alertAhead: 2,
+          ...(status !== 'booked' ? { arrivedAt: now - ago - 20 * 60_000 } : {}),
+          ...(status === 'called' || status === 'seen' ? { calledAt: now - ago } : {}),
+          ...(status === 'seen' ? { finishedAt: now - ago + sv.minutes * 60_000 } : {}),
+        })
+        t += Math.max(sv.minutes, 35)
+      }
+      const walk = [['Blessing Okon', 'seen'], ['Musa Danjuma', 'waiting'], ['Grace Effiong', 'waiting']] as const
+      for (const [i, [name, status]] of walk.entries()) {
+        await ctx.db.insert('walkIns', { clinicId: clinic!._id, departmentId: dept._id, date, number: i + 1, name, status, ...(status === 'seen' ? { finishedAt: now } : {}) })
+      }
+      await queueChanged(ctx, clinic!._id, dept._id)
+    }
+    return `Filled ${clinic!.name}'s queue for ${date}.`
   },
 })
