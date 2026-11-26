@@ -18,6 +18,9 @@ const addMins = (hhmm, n) => {
   return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
 }
 const todayLagos = () => new Intl.DateTimeFormat('en-CA', { timeZone: LAGOS }).format(new Date())
+const nowLagos = () => new Intl.DateTimeFormat('en-GB', { timeZone: LAGOS, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date())
+// Every booking holds at least one standard 35-minute block (the rest is grace time).
+const BLOCK = 35
 const dayParts = (iso) => {
   const d = new Date(`${iso}T00:00:00Z`)
   return {
@@ -251,11 +254,12 @@ export default function BookVisit() {
                     {ready.days.map((d) => {
                       const p = dayParts(d.date)
                       const full = d.times.length === 0
+                      const closed = full && d.date === todayLagos() && nowLagos() >= (dept.closesAt || '23:59')
                       return (
                         <button key={d.date} type="button" aria-pressed={date === d.date} disabled={full} onClick={() => { setDate(d.date); setTime(null) }}
                           className={`flex min-h-[58px] min-w-[84px] flex-col items-center justify-center rounded-2xl border-[1.5px] px-3 disabled:cursor-not-allowed disabled:opacity-45 ${date === d.date ? 'border-plum bg-plum text-white' : 'cursor-pointer border-line bg-white text-ink hover:border-plum-soft'}`}>
                           <span className="text-xs font-bold uppercase">{d.date === todayLagos() ? t('bookPage.today') : p.weekday}</span>
-                          <span className="font-display text-lg font-extrabold leading-tight">{full ? t('bookPage.dayFull') : `${p.day}`}</span>
+                          <span className="font-display text-lg font-extrabold leading-tight">{closed ? t('bookPage.dayClosed') : full ? t('bookPage.dayFull') : `${p.day}`}</span>
                         </button>
                       )
                     })}
@@ -263,9 +267,9 @@ export default function BookVisit() {
                   {dayTimes && dayTimes.length > 0 ? (
                     <div className="grid max-h-[300px] grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3">
                       {dayTimes.map((s) => (
-                        <button key={s} type="button" aria-pressed={time === s} onClick={() => setTime(s)}
+                        <button key={s} type="button" aria-pressed={time === s} onClick={() => { setTime(s); setError(''); setStep(2) }}
                           className={`min-h-12 cursor-pointer rounded-xl border-[1.5px] px-2 text-[15px] font-semibold transition-colors ${time === s ? 'border-rose bg-rose text-white' : 'border-line bg-white text-ink hover:border-rose-line hover:bg-blush'}`}>
-                          {clock(s)} – {clock(addMins(s, 35))}
+                          {clock(s)} – {clock(addMins(s, BLOCK))}
                         </button>
                       ))}
                     </div>
@@ -278,8 +282,6 @@ export default function BookVisit() {
 
             <div className="flex flex-col-reverse justify-between gap-2.5 sm:flex-row">
               {back(0)}
-              <button type="button" disabled={!time} onClick={() => { setError(''); setStep(2) }}
-                className={`${primary} ${time ? 'cursor-pointer bg-plum text-white hover:bg-plum-dark' : 'cursor-not-allowed bg-[#efe7ec] text-[#6b5a65]'}`}>{t('bookPage.next')}</button>
             </div>
           </section>
         )}
@@ -304,7 +306,7 @@ export default function BookVisit() {
               {[
                 [t('bookPage.hospital'), `${clinic.name}`],
                 [t('bookPage.serviceRow'), `${service.name} · ${dept.name}`],
-                [t('visit.when'), `${dayParts(date).long} · ${clock(time)} – ${clock(addMins(time, service.minutes))}`],
+                [t('visit.when'), `${dayParts(date).long} · ${clock(time)} – ${clock(addMins(time, Math.max(service.minutes, BLOCK)))}`],
                 [t('bookPage.fee'), service.price == null ? t('bookPage.feeUnknown') : service.price === 0 ? t('bookPage.free') : naira(service.price)],
               ].map(([k, v]) => (
                 <div key={k} className="flex items-start justify-between gap-4 py-3">

@@ -471,6 +471,7 @@ export default {
     noDays: 'No booking day for the next 2 days. Check back soon.',
     blocks: '{service} dey take around {n} min. Time go shift if person before you need more time.',
     nextFree: 'Next free time: {time} · each visit na {n} min',
+    dayClosed: 'E don close',
     dayFull: 'E don full',
     change: 'Change am',
     time: 'Time to reach',

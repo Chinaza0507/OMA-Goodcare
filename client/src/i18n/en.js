@@ -471,6 +471,7 @@ export default {
     noDays: 'No booking days in the next 2 days. Check back soon.',
     blocks: '{service} takes about {n} min. Times move along if someone before you needs longer.',
     nextFree: 'Next free: {time} · each visit takes {n} min',
+    dayClosed: 'Closed',
     dayFull: 'Full',
     change: 'Change',
     time: 'Arrival time',
