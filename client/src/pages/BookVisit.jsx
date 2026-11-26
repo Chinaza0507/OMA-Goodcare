@@ -209,9 +209,9 @@ export default function BookVisit() {
               <div key={d.id} className="step-in">
                 <div className="mb-2.5">
                   <h3 className="m-0 text-sm font-bold uppercase tracking-[0.06em] text-muted">{d.name}</h3>
-                  <span className="mt-0.5 flex items-center gap-1.5 text-[13px] text-muted">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM16 3v4M8 3v4M3 10h18" /></svg>
-                    <span><b className="font-semibold text-ink">{t('bookPage.bookingDaysLabel')}</b> {daysLabel(d.bookingDays)} · {shortClock(d.opensAt)}–{shortClock(d.closesAt)}</span>
+                  <span className="mt-1.5 inline-flex max-w-full items-center gap-1.5 rounded-full border border-rose-line bg-blush px-3 py-1 text-[12.5px] text-rose-dark">
+                    <svg className="shrink-0" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zM16 3v4M8 3v4M3 10h18" /></svg>
+                    <span><b className="font-semibold">{t('bookPage.bookingDaysLabel')}</b> {daysLabel(d.bookingDays)} · {shortClock(d.opensAt)}–{shortClock(d.closesAt)}</span>
                   </span>
                 </div>
                 <div className="grid gap-2.5 sm:grid-cols-2">
