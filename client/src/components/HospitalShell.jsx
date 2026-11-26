@@ -19,7 +19,7 @@ export default function HospitalShell({ children, actions }) {
             <Logo width={34} />
             <span className="flex flex-col leading-tight">
               <b className="font-display text-[15px]">{clinic?.name ?? user?.name}</b>
-              <span className="text-xs text-[#cdb9e8]">{user?.role === 'manager' ? 'Manager' : 'Front desk'} · ỌMA</span>
+              <span className="text-xs text-[#cdb9e8]">{user?.role === 'manager' ? 'Manager' : `Front desk · ${user?.name ?? ''}`}</span>
             </span>
           </Link>
           <nav aria-label="Hospital" className="order-3 -mx-1 flex w-full gap-1 overflow-x-auto px-1 sm:order-none sm:w-auto">

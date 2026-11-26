@@ -77,6 +77,9 @@ export default function HospitalHome() {
   const [moving, setMoving] = useState(null) // appointment to move to front
   const [cancelDay, setCancelDay] = useState(false)
   const [search, setSearch] = useState('')
+  // The 3-step guide shows the first time on each computer; the ? button brings it back.
+  const [help, setHelp] = useState(() => { try { return !localStorage.getItem('oma_desk_help_seen') } catch { return true } })
+  const closeHelp = () => { setHelp(false); try { localStorage.setItem('oma_desk_help_seen', '1') } catch { /* private mode */ } }
   const isStaff = user && (user.role === 'manager' || user.role === 'staff')
 
   const flash = (ok, text) => { setToast({ ok, text }); setTimeout(() => setToast(null), 3500) }
@@ -188,7 +191,11 @@ export default function HospitalHome() {
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <p className="m-0 text-sm text-muted">{new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Africa/Lagos' }).format(day ? new Date(`${day}T12:00:00Z`) : new Date())}</p>
-              <h1 className="m-0 text-[28px] font-extrabold leading-tight">{isToday ? 'Today’s bookings' : 'Upcoming bookings'}</h1>
+              <h1 className="m-0 flex items-center gap-2.5 text-[28px] font-extrabold leading-tight">
+                {isToday ? 'Today’s bookings' : 'Upcoming bookings'}
+                <button type="button" onClick={() => (help ? closeHelp() : setHelp(true))} aria-label="How to use this page" aria-expanded={help}
+                  className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-line bg-white font-display text-base font-extrabold text-plum hover:bg-plum-tint">?</button>
+              </h1>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <div role="tablist" aria-label="Day" className="flex rounded-2xl bg-white p-1 ring-1 ring-line">
@@ -199,6 +206,26 @@ export default function HospitalHome() {
               </div>
             </div>
           </div>
+
+          {help && isToday && (
+            <section aria-label="How to use this page" className="relative rounded-[22px] bg-plum-tint p-5 ring-1 ring-plum-soft">
+              <button type="button" onClick={closeHelp} aria-label="Close the guide" className="absolute right-3 top-3 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border-0 bg-white/70 text-muted hover:bg-white">✕</button>
+              <h2 className="m-0 mb-3 text-base font-bold">How to use this page</h2>
+              <ol className="m-0 grid list-none gap-3 p-0 sm:grid-cols-3">
+                {[
+                  ['Patient arrives', 'Find them under “Not arrived yet” (or search their name) and tap Arrived.'],
+                  ['Doctor is free', 'Tap Call next. Their phone rings and the waiting-room screen shows their number.'],
+                  ['Patient comes out', 'Tap Seen. Then Call next again.'],
+                ].map(([h, b], i) => (
+                  <li key={h} className="flex gap-3 rounded-2xl bg-white p-3.5">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-plum font-display font-extrabold text-white">{i + 1}</span>
+                    <span><b className="block text-[15px]">{h}</b><span className="text-sm text-muted">{b}</span></span>
+                  </li>
+                ))}
+              </ol>
+              <p className="m-0 mt-3 text-[13px] text-muted">Didn’t come in 10 min? Tap No-show and call the next person. Emergency? Tap ↑ Move up.</p>
+            </section>
+          )}
 
           <div role="tablist" aria-label="Departments" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
             {info.departments.map((d) => (
@@ -263,7 +290,7 @@ export default function HospitalHome() {
             <div className="flex flex-col gap-5">
               <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Find a patient: name or number"
                 aria-label="Find a patient by name or number" className={`${input} min-h-11`} />
-              <QueueList title={`Waiting · ${waiting.length}`} empty={q ? 'Nobody waiting matches that.' : 'Nobody has arrived yet.'} items={waiting} busyId={busyId}
+              <QueueList title={`Waiting · ${waiting.length}`} empty={q ? 'Nobody waiting matches that.' : 'Nobody here yet. When a patient arrives, find them below and tap Arrived.'} items={waiting} busyId={busyId}
                 actions={(a, i) => i > 0 && (
                   <button type="button" onClick={() => setMoving(a)} title="Move to the front (emergency)" className="min-h-9 cursor-pointer rounded-lg border border-line bg-white px-2.5 text-xs font-semibold text-rose hover:bg-blush">↑ Move up</button>
                 )} />
