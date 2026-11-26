@@ -47,16 +47,16 @@ const clean = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !=
 const Q = 'query'
 const M = 'mutation'
 const ROUTES = [
-  ['POST', /^\/auth\/register$/, M, fns.auth.register, (_, b) => b],
-  ['POST', /^\/auth\/login$/, M, fns.auth.login, (_, b) => b],
-  ['POST', /^\/auth\/work-login$/, M, fns.auth.workLogin, (_, b) => b],
+  ['POST', /^\/auth\/register$/, M, fns.auth.register, (_, b) => b, false],
+  ['POST', /^\/auth\/login$/, M, fns.auth.login, (_, b) => b, false],
+  ['POST', /^\/auth\/work-login$/, M, fns.auth.workLogin, (_, b) => b, false],
   ['GET', /^\/auth\/me$/, Q, fns.auth.me, () => ({})],
   ['PATCH', /^\/auth\/me$/, M, fns.auth.updateMe, (_, b) => b],
   ['POST', /^\/auth\/change-secret$/, M, fns.auth.changeSecret, (_, b) => b],
-  ['POST', /^\/auth\/forgot-pin$/, M, fns.auth.forgotPin, (_, b) => b],
-  ['POST', /^\/auth\/reset-pin$/, M, fns.auth.resetPin, (_, b) => b],
+  ['POST', /^\/auth\/forgot-pin$/, M, fns.auth.forgotPin, (_, b) => b, false],
+  ['POST', /^\/auth\/reset-pin$/, M, fns.auth.resetPin, (_, b) => b, false],
   ['POST', /^\/auth\/delete-account$/, M, fns.auth.deleteAccount, (_, b) => b],
-  ['POST', /^\/hospitals\/register$/, M, fns.patient.registerHospital, (_, b) => b],
+  ['POST', /^\/hospitals\/register$/, M, fns.patient.registerHospital, (_, b) => b, false],
 
   ['GET', /^\/family$/, Q, fns.patient.familyList, () => ({})],
   ['POST', /^\/family$/, M, fns.patient.familyAdd, (_, b) => b],
