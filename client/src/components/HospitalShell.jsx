@@ -4,7 +4,7 @@ import { useAuth } from '../auth.jsx'
 
 const NAV = [
   ['/hospital/home', 'Queue', 'M4 6h16M4 12h16M4 18h10'],
-  ['/hospital/stats', "Today's numbers", 'M4 20V10M10 20V4M16 20v-7M22 20H2'],
+  ['/hospital/stats', 'Numbers', 'M4 20V10M10 20V4M16 20v-7M22 20H2'],
   ['/hospital/settings', 'Settings', 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM4 12h2M18 12h2M12 4v2M12 18v2M6.3 6.3l1.4 1.4M16.3 16.3l1.4 1.4M6.3 17.7l1.4-1.4M16.3 7.7l1.4-1.4', 'manager'],
 ]
 
@@ -34,13 +34,16 @@ export default function HospitalShell({ children, actions }) {
               <a href={`/screen/${clinic.id}`} target="_blank" rel="noreferrer"
                 className="flex min-h-10 shrink-0 items-center gap-2 rounded-xl px-3.5 text-sm font-semibold text-white/85 no-underline hover:bg-white/10">
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="13" rx="2" /><path d="M8 21h8M12 17v4" /></svg>
-                Now serving screen ↗
+                Screen ↗
               </a>
             )}
           </nav>
           <div className="ml-auto flex items-center gap-2">
             {actions}
-            <button type="button" onClick={logout} className="min-h-10 cursor-pointer rounded-xl border border-white/25 bg-transparent px-3.5 text-sm font-semibold text-white hover:bg-white/10">Log out</button>
+            <button type="button" onClick={logout} title="Log out" aria-label="Log out"
+              className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl border border-white/25 bg-transparent text-white hover:bg-white/10">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" /></svg>
+            </button>
           </div>
         </div>
       </header>

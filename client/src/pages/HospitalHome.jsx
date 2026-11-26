@@ -9,6 +9,12 @@ const clock = (hhmm) => {
   const [h, m] = hhmm.split(':').map(Number)
   return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`
 }
+const LAGOS = 'Africa/Lagos'
+const toMin = (hhmm) => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m }
+const lagosMinutes = (ms) => toMin(new Intl.DateTimeFormat('en-GB', { timeZone: LAGOS, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(ms)))
+const lagosWeekday = () => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(new Intl.DateTimeFormat('en-GB', { timeZone: LAGOS, weekday: 'short' }).format(new Date()))
+const WEEKDAYS = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays']
+const LATE_AFTER = 10
 const minsAgo = (iso, now) => Math.max(0, Math.round((now - new Date(iso).getTime()) / 60000))
 const ERR = {
   nobody_waiting: 'Nobody has arrived yet. Mark a patient as arrived first.',
@@ -70,6 +76,7 @@ export default function HospitalHome() {
   const [day, setDay] = useState(null) // null = today
   const [moving, setMoving] = useState(null) // appointment to move to front
   const [cancelDay, setCancelDay] = useState(false)
+  const [search, setSearch] = useState('')
   const isStaff = user && (user.role === 'manager' || user.role === 'staff')
 
   const flash = (ok, text) => { setToast({ ok, text }); setTimeout(() => setToast(null), 3500) }
@@ -79,7 +86,8 @@ export default function HospitalHome() {
     setInfo(c)
     setAppts(today.appointments)
     setWalkIns(today.walkIns)
-    setDept((d) => d ?? c.departments[0]?.id ?? null)
+    const wd = lagosWeekday()
+    setDept((d) => d ?? (c.departments.find((x) => x.bookingDays?.includes(wd)) ?? c.departments[0])?.id ?? null)
   }, [day])
 
   useEffect(() => { if (isStaff) load().catch(() => flash(false, 'Could not load the queue. Check the connection.')) }, [isStaff, load])
@@ -130,15 +138,35 @@ export default function HospitalHome() {
     try { await api(`/staff/walk-ins/${w.id}`, { method: 'PATCH', body: { status } }); await load() } catch (err) { flash(false, errText(err)) } finally { setBusyId(null) }
   }
   const withDoctor = list.find((a) => a.status === 'called')
-  const waiting = list.filter((a) => a.status === 'checked_in')
-  const expected = list.filter((a) => a.status === 'booked')
+  const q = search.trim().toLowerCase().replace(/^#/, '')
+  const matches = (a) => !q || (a.name ?? a.firstName).toLowerCase().includes(q) || String(a.queueNumber) === q
+  const waitingAll = list.filter((a) => a.status === 'checked_in')
+  const waiting = waitingAll.filter(matches)
+  const expected = list.filter((a) => a.status === 'booked').filter(matches)
+  const nowMin = lagosMinutes(now)
+  const isLate = (a) => a.status === 'booked' && toMin(a.time) + LATE_AFTER <= nowMin
+  // How far behind the booked times this line is running: when the next person can go in vs their booked time.
+  const behind = (() => {
+    const next = waitingAll[0]
+    if (!next) return 0
+    let free = nowMin
+    if (withDoctor?.calledAt) free = Math.max(nowMin, lagosMinutes(new Date(withDoctor.calledAt).getTime()) + withDoctor.minutes)
+    return Math.max(0, free - toMin(next.time))
+  })()
   const done = list.filter((a) => ['seen', 'no_show', 'cancelled'].includes(a.status))
 
   if (checking) return null
   if (!isStaff) return <Navigate to="/hospital/login" replace />
 
   const deptName = info?.departments.find((d) => d.id === dept)?.name
-  const counts = (id) => (appts ?? []).filter((a) => a.departmentId === id && ['checked_in', 'booked'].includes(a.status)).length
+  const counts = (id) => (appts ?? []).filter((a) => a.departmentId === id && a.status === (isToday ? 'checked_in' : 'booked')).length
+  const deptInfo = info?.departments.find((d) => d.id === dept)
+  const booksThisDay = (() => {
+    if (!deptInfo?.bookingDays) return true
+    const wd = day ? new Date(`${day}T12:00:00Z`).getUTCDay() : lagosWeekday()
+    return deptInfo.bookingDays.includes(wd)
+  })()
+  const thisWeekday = day ? new Date(`${day}T12:00:00Z`).getUTCDay() : lagosWeekday()
 
   return (
     <HospitalShell>
@@ -169,7 +197,6 @@ export default function HospitalHome() {
                     className={`min-h-9 cursor-pointer rounded-xl border-0 px-3 text-sm font-bold ${(day ?? info.dates[0]) === d ? 'bg-plum text-white' : 'bg-transparent text-ink hover:bg-plum-tint'}`}>{dayLabel(d, i)}</button>
                 ))}
               </div>
-              <button type="button" onClick={() => setCancelDay(true)} className="min-h-10 cursor-pointer rounded-xl border-[1.5px] border-[#f3c7cf] bg-white px-4 text-sm font-bold text-[#c8102e] hover:bg-[#fff5f6]">{isToday ? 'Cancel rest of day' : 'Cancel this day'}</button>
             </div>
           </div>
 
@@ -178,10 +205,16 @@ export default function HospitalHome() {
               <button key={d.id} type="button" role="tab" aria-selected={dept === d.id} onClick={() => setDept(d.id)}
                 className={`flex min-h-11 shrink-0 cursor-pointer items-center gap-2 rounded-2xl border-[1.5px] px-4 text-sm font-bold ${dept === d.id ? 'border-plum bg-plum text-white' : 'border-line bg-white text-ink hover:border-plum-soft'}`}>
                 {d.name}
-                <span className={`rounded-full px-2 py-0.5 text-xs ${dept === d.id ? 'bg-white/20' : 'bg-plum-tint text-plum'}`}>{counts(d.id)}</span>
+                <span title={isToday ? 'Waiting' : 'Booked'} className={`rounded-full px-2 py-0.5 text-xs ${dept === d.id ? 'bg-white/20' : 'bg-plum-tint text-plum'}`}>{counts(d.id)}</span>
               </button>
             ))}
           </div>
+
+          {!booksThisDay && list.length === 0 && (
+            <p className="m-0 rounded-2xl bg-white p-5 text-center text-[15px] text-muted ring-1 ring-line">
+              No ỌMA bookings on {WEEKDAYS[thisWeekday]} for {deptName}. Walk-ins can still be logged below.
+            </p>
+          )}
 
           {!isToday && (
             <QueueList title={`Booked · ${list.filter((a) => a.status === 'booked').length}`} empty="No bookings for this day yet." items={list.filter((a) => a.status === 'booked')} />
@@ -196,7 +229,7 @@ export default function HospitalHome() {
                 <>
                   <div className="flex items-end gap-4">
                     <span className="font-display text-6xl font-extrabold leading-none">#{withDoctor.queueNumber}</span>
-                    <span className="pb-1"><b className="block text-xl">{withDoctor.firstName}</b><span className="text-sm text-[#cdb9e8]">called {minsAgo(withDoctor.calledAt, now)} min ago</span></span>
+                    <span className="pb-1"><b className="block text-xl">{withDoctor.name ?? withDoctor.firstName}</b><span className="text-sm text-[#cdb9e8]">called {minsAgo(withDoctor.calledAt, now)} min ago</span></span>
                   </div>
                   <div className="grid grid-cols-2 gap-2.5">
                     <button type="button" disabled={busyId === withDoctor.id} onClick={() => act(withDoctor.id, `/staff/appointments/${withDoctor.id}/seen`, null, `#${withDoctor.queueNumber} marked as seen.`)}
@@ -215,18 +248,42 @@ export default function HospitalHome() {
               ) : (
                 <p className="m-0 text-lg text-[#e3d8fb]">Nobody is with the doctor right now.</p>
               )}
-              <button type="button" disabled={!!withDoctor || waiting.length === 0 || busyId === 'next'}
+              {behind >= 10 && (
+                <p className="m-0 rounded-xl bg-white/10 px-3.5 py-2 text-sm text-[#f6d9e7]">Running about {behind} min behind. Patients can see this on their phones.</p>
+              )}
+              <button type="button" disabled={!!withDoctor || waitingAll.length === 0 || busyId === 'next'}
                 onClick={() => act('next', `/staff/departments/${dept}/call-next`, null, 'Next patient called.')}
                 className="min-h-[60px] cursor-pointer rounded-2xl border-0 bg-rose text-lg font-extrabold text-white hover:bg-rose-dark disabled:cursor-not-allowed disabled:bg-white/15 disabled:text-white/60">
-                {withDoctor ? 'Finish the current patient first' : waiting.length ? `Call next · #${waiting[0].queueNumber} ${waiting[0].firstName}` : 'Nobody waiting yet'}
+                {withDoctor ? 'Finish the current patient first' : waitingAll.length ? `Call next · #${waitingAll[0].queueNumber} ${waitingAll[0].firstName}` : 'Nobody waiting yet'}
               </button>
             </section>
 
-            {/* Walk-in log: seen by another doctor, never in the booking line */}
+            </div>
+
+            <div className="flex flex-col gap-5">
+              <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Find a patient: name or number"
+                aria-label="Find a patient by name or number" className={`${input} min-h-11`} />
+              <QueueList title={`Waiting · ${waiting.length}`} empty={q ? 'Nobody waiting matches that.' : 'Nobody has arrived yet.'} items={waiting} busyId={busyId}
+                actions={(a, i) => i > 0 && (
+                  <button type="button" onClick={() => setMoving(a)} title="Move to the front (emergency)" className="min-h-9 cursor-pointer rounded-lg border border-line bg-white px-2.5 text-xs font-semibold text-rose hover:bg-blush">↑ Move up</button>
+                )} />
+              <QueueList title={`Not arrived yet · ${expected.length}`} empty={q ? 'Nobody expected matches that.' : 'No more bookings expected today.'} items={expected} busyId={busyId} isLate={isLate}
+                actions={(a) => (
+                  <button type="button" disabled={busyId === a.id} onClick={() => act(a.id, `/staff/appointments/${a.id}/check-in`, null, `#${a.queueNumber} has arrived.`)} className="min-h-10 cursor-pointer rounded-xl border-0 bg-[#1d6b3a] px-3.5 text-sm font-bold text-white hover:bg-[#165a30] disabled:opacity-50">Arrived</button>
+                )} />
+              {done.length > 0 && (
+                <details className="rounded-[22px] bg-white p-4 ring-1 ring-line">
+                  <summary className="cursor-pointer text-sm font-bold text-muted">Finished today · {done.length}</summary>
+                  <div className="mt-3"><QueueList bare items={done} busyId={busyId} actions={(a) => a.status === 'no_show' && (
+                    <button type="button" disabled={busyId === a.id} onClick={() => act(a.id, `/staff/appointments/${a.id}/requeue`, null, `#${a.queueNumber} is back in the queue.`)} className="min-h-10 cursor-pointer rounded-xl border border-line bg-white px-3 text-sm font-semibold text-plum hover:bg-plum-tint">Arrived late</button>
+                  )} /></div>
+                </details>
+              )}
+              {/* Walk-in log: seen by another doctor, never in the booking line */}
             <section className="flex flex-col gap-3 rounded-[24px] bg-white p-5 ring-1 ring-line">
               <div>
                 <h2 className="m-0 text-base font-bold">Walk-ins · {deptWalkIns.length}</h2>
-                <p className="m-0 mt-0.5 text-xs text-muted">Seen by the walk-in doctor. Logged here for today’s numbers; they don’t affect booked patients.</p>
+                <p className="m-0 mt-0.5 text-xs text-muted">For today’s numbers only.</p>
               </div>
               <form onSubmit={addWalkIn} className="flex gap-2">
                 <input className={`${input} min-h-11`} value={walkName} onChange={(e) => setWalkName(e.target.value)} placeholder="Walk-in patient’s name" aria-label="Walk-in patient’s name" />
@@ -252,27 +309,13 @@ export default function HospitalHome() {
               )}
             </section>
             </div>
-
-            <div className="flex flex-col gap-5">
-              <QueueList title={`Waiting · ${waiting.length}`} empty="Nobody has arrived yet." items={waiting} busyId={busyId}
-                actions={(a) => (<>
-                  <button type="button" disabled={!!withDoctor || busyId === a.id} onClick={() => act(a.id, `/staff/appointments/${a.id}/call`, null, `#${a.queueNumber} called.`)} className="min-h-10 cursor-pointer rounded-xl border-0 bg-plum px-3.5 text-sm font-bold text-white hover:bg-plum-dark disabled:opacity-40">Call</button>
-                  <button type="button" onClick={() => setMoving(a)} className="min-h-10 cursor-pointer rounded-xl border border-line bg-white px-3 text-sm font-semibold text-rose hover:bg-blush">Move to front</button>
-                </>)} />
-              <QueueList title={`Not arrived yet · ${expected.length}`} empty="No more bookings expected today." items={expected} busyId={busyId}
-                actions={(a) => (
-                  <button type="button" disabled={busyId === a.id} onClick={() => act(a.id, `/staff/appointments/${a.id}/check-in`, null, `#${a.queueNumber} has arrived.`)} className="min-h-10 cursor-pointer rounded-xl border-0 bg-[#1d6b3a] px-3.5 text-sm font-bold text-white hover:bg-[#165a30] disabled:opacity-50">Arrived</button>
-                )} />
-              {done.length > 0 && (
-                <details className="rounded-[22px] bg-white p-4 ring-1 ring-line">
-                  <summary className="cursor-pointer text-sm font-bold text-muted">Finished today · {done.length}</summary>
-                  <div className="mt-3"><QueueList bare items={done} busyId={busyId} actions={(a) => a.status === 'no_show' && (
-                    <button type="button" disabled={busyId === a.id} onClick={() => act(a.id, `/staff/appointments/${a.id}/requeue`, null, `#${a.queueNumber} is back in the queue.`)} className="min-h-10 cursor-pointer rounded-xl border border-line bg-white px-3 text-sm font-semibold text-plum hover:bg-plum-tint">Arrived late</button>
-                  )} /></div>
-                </details>
-              )}
-            </div>
           </div>}
+
+          {(isToday || list.length > 0) && (
+            <button type="button" onClick={() => setCancelDay(true)} className="mx-auto mt-2 cursor-pointer border-0 bg-transparent text-sm font-semibold text-[#c8102e] underline underline-offset-4 hover:text-[#a00c24]">
+              {isToday ? 'Doctor not available? Cancel the rest of today' : 'Cancel this day’s bookings'}
+            </button>
+          )}
         </div>
       )}
 
@@ -319,22 +362,24 @@ export default function HospitalHome() {
   )
 }
 
-function QueueList({ title, items, empty, actions, bare = false }) {
+function QueueList({ title, items, empty, actions, bare = false, isLate }) {
   const body = items.length === 0 ? (
     <p className="m-0 rounded-2xl border border-dashed border-line p-5 text-center text-sm text-muted">{empty}</p>
   ) : (
     <ul className="m-0 flex list-none flex-col divide-y divide-line p-0">
-      {items.map((a) => {
+      {items.map((a, i) => {
         const [label, cls] = STATUS[a.status]
+        const late = isLate?.(a)
         return (
           <li key={a.id} className="flex flex-wrap items-center gap-3 py-3 first:pt-0 last:pb-0">
             <span className="w-14 font-display text-xl font-extrabold text-plum">#{a.queueNumber}</span>
             <span className="min-w-0 flex-1">
-              <b className="block truncate text-[15px]">{a.firstName}</b>
+              <b className="block truncate text-[15px]">{a.name ?? a.firstName}</b>
               <span className="text-xs text-muted">{clock(a.time)} · {a.serviceName} · {a.minutes} min</span>
             </span>
-            <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${cls}`}>{label}</span>
-            <span className="flex gap-2">{actions?.(a)}</span>
+            {late && <span className="rounded-full bg-rose-tint px-2.5 py-1 text-xs font-bold text-rose-dark">Late</span>}
+            {bare && <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${cls}`}>{label}</span>}
+            <span className="flex gap-2">{actions?.(a, i)}</span>
           </li>
         )
       })}

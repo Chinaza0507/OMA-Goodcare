@@ -2,7 +2,7 @@
 //   npx convex run setup:createAdmin '{"name":"Your Name","email":"you@example.com","password":"…"}'
 import { v } from 'convex/values'
 import { internalMutation } from './_generated/server'
-import { cleanEmail, fail, fromMinutes, hashSecret, text, toMinutes, todayLagos, queueChanged } from './lib/core'
+import { cleanEmail, fail, fromMinutes, hashSecret, text, toMinutes, todayLagos, queueChanged, nowMinutesLagos } from './lib/core'
 
 export const createAdmin = internalMutation({
   args: { name: v.string(), email: v.string(), password: v.string() },
@@ -154,22 +154,23 @@ export const seedDemoQueue = internalMutation({
     for (const old of await ctx.db.query('walkIns').withIndex('by_clinic_date', (q) => q.eq('clinicId', clinic!._id).eq('date', date)).collect()) await ctx.db.delete(old._id)
 
     const now = Date.now()
-    // seen, with the doctor, three waiting, four not arrived yet
-    const plan = ['seen', 'seen', 'called', 'checked_in', 'checked_in', 'checked_in', 'booked', 'booked', 'booked', 'booked'] as const
+    // two seen, one late, one with the doctor, three waiting, three not arrived yet
+    const plan = ['seen', 'seen', 'booked', 'called', 'checked_in', 'checked_in', 'checked_in', 'booked', 'booked', 'booked'] as const
     let n = 0
     for (const dept of await ctx.db.query('departments').withIndex('by_clinic', (q) => q.eq('clinicId', clinic!._id)).collect()) {
       const services = (await ctx.db.query('services').withIndex('by_clinic', (q) => q.eq('clinicId', clinic!._id)).collect()).filter((s) => s.departmentId === dept._id && s.active)
       if (!services.length) continue
-      let t = toMinutes(dept.opensAt)
-      for (let i = 0; i < plan.length && t < toMinutes(dept.closesAt); i++) {
+      // Times are set around "now", so the demo looks like a real morning whenever it is shown.
+      let t = Math.max(0, Math.round((nowMinutesLagos() - 3 * 35 - 10) / 5) * 5)
+      for (let i = 0; i < plan.length; i++) {
         const sv = services[i % services.length]
         const status = plan[i]
-        const ago = (plan.length - i) * 12 * 60_000
+        const ago = Math.max(0, nowMinutesLagos() - t) * 60_000
         await ctx.db.insert('appointments', {
           clinicId: clinic!._id, departmentId: dept._id, serviceId: sv._id, serviceName: sv.name, minutes: sv.minutes,
-          bookedBy: manager!._id, patientName: DEMO_NAMES[n++ % DEMO_NAMES.length], date, time: fromMinutes(t),
+          bookedBy: manager!._id, patientName: DEMO_NAMES[n++ % DEMO_NAMES.length], date, time: fromMinutes(Math.min(t, 23 * 60 + 55)),
           queueNumber: i + 1, status, depositNaira: 0, depositStatus: 'none', frontRank: 0, alertAhead: 2,
-          ...(status !== 'booked' ? { arrivedAt: now - ago - 20 * 60_000 } : {}),
+          ...(status !== 'booked' ? { arrivedAt: now - ago - 15 * 60_000 } : {}),
           ...(status === 'called' || status === 'seen' ? { calledAt: now - ago } : {}),
           ...(status === 'seen' ? { finishedAt: now - ago + sv.minutes * 60_000 } : {}),
         })

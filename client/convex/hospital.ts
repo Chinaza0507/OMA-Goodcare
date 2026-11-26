@@ -20,7 +20,8 @@ const staffJson = (a: Doc<'appointments'>, deptName: string, graceMinutes: numbe
   departmentId: a.departmentId,
   departmentName: deptName,
   queueNumber: a.queueNumber,
-  firstName: firstName(a.patientName), // the list shows first names only
+  firstName: firstName(a.patientName),
+  name: a.patientName, // staff only: the desk needs full names to call people
   serviceName: a.serviceName,
   minutes: a.minutes,
   time: a.time,
