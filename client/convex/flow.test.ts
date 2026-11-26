@@ -259,3 +259,33 @@ describe('school clinic rule', () => {
     expect(await code(book(t, s, checkup, '13:15', '2026-03-12'))).toBe('booking_blocked')
   })
 })
+
+describe('late arrivals', () => {
+  test('someone 15+ min late joins behind the people already waiting', async () => {
+    const { t, desk, deptId, checkup } = await setup()
+    const a = await book(t, await patient(t, '08035550001'), checkup, '09:10') // will be late
+    const b = await book(t, await patient(t, '08035550002'), checkup, '09:45')
+    const c = await book(t, await patient(t, '08035550003'), checkup, '10:20') // arrives early
+    vi.setSystemTime(at('10:00'))
+    await t.mutation(api.hospital.checkIn, { token: desk, id: b.appointment.id })
+    await t.mutation(api.hospital.checkIn, { token: desk, id: c.appointment.id })
+    vi.setSystemTime(at('10:05'))
+    await t.mutation(api.hospital.checkIn, { token: desk, id: a.appointment.id }) // 55 min late
+    const order: number[] = []
+    for (const appt of [b, c, a]) {
+      order.push((await t.mutation(api.hospital.callNext, { token: desk, departmentId: deptId })).queueNumber)
+      await t.mutation(api.hospital.seen, { token: desk, id: appt.appointment.id })
+    }
+    expect(order).toEqual([2, 3, 1])
+  })
+
+  test('someone within the 15 min grace keeps their place', async () => {
+    const { t, desk, deptId, checkup } = await setup()
+    const a = await book(t, await patient(t, '08035550004'), checkup, '09:10')
+    const b = await book(t, await patient(t, '08035550005'), checkup, '09:45')
+    vi.setSystemTime(at('09:20'))
+    await t.mutation(api.hospital.checkIn, { token: desk, id: b.appointment.id })
+    await t.mutation(api.hospital.checkIn, { token: desk, id: a.appointment.id }) // 10 min late: fine
+    expect((await t.mutation(api.hospital.callNext, { token: desk, departmentId: deptId })).queueNumber).toBe(1)
+  })
+})

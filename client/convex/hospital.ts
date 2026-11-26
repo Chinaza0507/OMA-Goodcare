@@ -5,9 +5,9 @@ import { mutation, query, type MutationCtx, type QueryCtx } from './_generated/s
 import type { Doc, Id } from './_generated/dataModel'
 import {
   cleanEmail, dayStartMs, fail, firstName, hashSecret, int, logAction, normalizePhone,
-  queueChanged, requireRole, requireStaff, text, todayLagos, toMinutes, HHMM,
+  queueChanged, requireRole, requireStaff, text, todayLagos, toMinutes, fromMinutes, nowMinutesLagos, HHMM,
 } from './lib/core'
-import { addDays, frontOfQueueRank, queueCompare, recordSchoolNoShow, settleDeposit, dayAppointments, MAX_DAYS_AHEAD } from './lib/rules'
+import { addDays, backOfWaitingLine, frontOfQueueRank, LATE_AFTER, queueCompare, recordSchoolNoShow, settleDeposit, dayAppointments, MAX_DAYS_AHEAD } from './lib/rules'
 import { billingTypeFor } from './patient'
 import { CLINIC_TYPES } from './schema'
 
@@ -164,7 +164,10 @@ export const checkIn = mutation({
     const { user, appt } = await deskAppointment(ctx, a.token, a.id)
     needStatus(appt, 'booked')
     if (appt.date !== todayLagos()) fail('not_today')
-    await ctx.db.patch(appt._id, { status: 'checked_in', arrivedAt: Date.now() })
+    // Came after the grace time: they join the line from now, behind people already waiting.
+    const now = nowMinutesLagos()
+    const late = now >= toMinutes(appt.time) + LATE_AFTER
+    await ctx.db.patch(appt._id, { status: 'checked_in', arrivedAt: Date.now(), ...(late ? { lineTime: await backOfWaitingLine(ctx, appt) } : {}) })
     await logAction(ctx, { clinicId: user.clinicId, actor: user, action: 'check_in', appt })
     await queueChanged(ctx, appt.clinicId, appt.departmentId)
     return { status: 'checked_in' }
@@ -258,8 +261,8 @@ export const requeue = mutation({
     const { user, appt } = await deskAppointment(ctx, a.token, a.id)
     needStatus(appt, 'called', 'no_show')
     if (appt.date !== todayLagos()) fail('invalid_status', { status: appt.status })
-    const rank = await frontOfQueueRank(ctx, appt)
-    await ctx.db.patch(appt._id, { status: 'checked_in', calledAt: undefined, finishedAt: undefined, arrivedAt: Date.now(), frontRank: rank })
+    // Missed their call and came back: they join the line from now, behind people already waiting.
+    await ctx.db.patch(appt._id, { status: 'checked_in', calledAt: undefined, finishedAt: undefined, arrivedAt: Date.now(), lineTime: await backOfWaitingLine(ctx, appt) })
     await logAction(ctx, { clinicId: user.clinicId, actor: user, action: 'late_arrival_requeued', appt })
     await queueChanged(ctx, appt.clinicId, appt.departmentId)
     return { status: 'checked_in' }

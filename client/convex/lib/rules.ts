@@ -46,10 +46,25 @@ export async function settleDeposit(ctx: MutationCtx, appt: Doc<'appointments'>,
 export const ACTIVE = ['booked', 'checked_in', 'called'] as const
 export const isActive = (st: string) => (ACTIVE as readonly string[]).includes(st)
 
-// Order of the booking line for a department and day: "move to front" first, then the booked
-// time, then queue number. This is the ONE definition of "who is ahead".
+// Grace: someone who hasn't arrived 15 minutes after their booked time is late. The next
+// person goes in; when the late person turns up they join the line from the time they arrived.
+export const LATE_AFTER = 15
+// Where someone stands in line: their booked time, or their arrival time if they came late.
+export const lineMinutes = (a: Doc<'appointments'>) => toMinutes(a.lineTime ?? a.time)
+
+// Place in line for someone who came late (or came back after missing their call): behind
+// everyone already waiting or with the doctor.
+export async function backOfWaitingLine(ctx: QueryCtx, appt: Doc<'appointments'>) {
+  const here = (await dayAppointments(ctx, appt.departmentId, appt.date))
+    .filter((a) => a._id !== appt._id && (a.status === 'checked_in' || a.status === 'called'))
+  const last = here.reduce((m, a) => Math.max(m, lineMinutes(a)), -1)
+  return fromMinutes(Math.min(Math.max(nowMinutesLagos(), last + 1), 23 * 60 + 59))
+}
+
+// Order of the booking line for a department and day: "move to front" first, then place in
+// line (see lineMinutes), then queue number. This is the ONE definition of "who is ahead".
 export const queueCompare = (a: Doc<'appointments'>, b: Doc<'appointments'>) =>
-  a.frontRank - b.frontRank || toMinutes(a.time) - toMinutes(b.time) || a.queueNumber - b.queueNumber
+  a.frontRank - b.frontRank || lineMinutes(a) - lineMinutes(b) || a.queueNumber - b.queueNumber
 
 export const dayAppointments = (ctx: QueryCtx, departmentId: Id<'departments'>, date: string) =>
   ctx.db.query('appointments').withIndex('by_dept_date', (q) => q.eq('departmentId', departmentId).eq('date', date)).collect()
@@ -66,9 +81,7 @@ export async function queueInfo(ctx: QueryCtx, appt: Doc<'appointments'>) {
   if (!isActive(appt.status) || appt.date !== todayLagos()) return null
   const now = nowMinutesLagos()
   const nowMs = Date.now()
-  // Someone who hasn't arrived 10+ minutes after their booked time is treated as late: they no
-  // longer hold others up (if they turn up, the desk puts them back in line).
-  const LATE_AFTER = 10
+  // Someone who hasn't arrived LATE_AFTER minutes after their booked time no longer holds others up.
   const line = (await dayAppointments(ctx, appt.departmentId, appt.date))
     .filter((a) => isActive(a.status))
     .filter((a) => a._id === appt._id || a.status !== 'booked' || toMinutes(a.time) + LATE_AFTER > now)
@@ -85,12 +98,12 @@ export async function queueInfo(ctx: QueryCtx, appt: Doc<'appointments'>) {
   let start = now
   for (const a of line) {
     if (a.status === 'called') { if (a._id === appt._id) start = now; continue }
-    start = Math.max(cursor, toMinutes(a.time))
+    start = Math.max(cursor, lineMinutes(a))
     if (a._id === appt._id) break
     cursor = start + a.minutes
   }
   if (appt.status === 'called') start = now
-  // Booked but never arrived, 10+ minutes past their time: they missed it. The desk can put them
+  // Booked but never arrived, LATE_AFTER minutes past their time: they missed it. The desk can put them
   // back in line when they turn up; until then, no "doctor running late" message.
   const missed = appt.status === 'booked' && toMinutes(appt.time) + LATE_AFTER <= now
   const delayMinutes = missed ? 0 : Math.max(0, start - toMinutes(appt.time))

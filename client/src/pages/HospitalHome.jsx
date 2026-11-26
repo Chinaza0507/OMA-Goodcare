@@ -14,7 +14,7 @@ const toMin = (hhmm) => { const [h, m] = hhmm.split(':').map(Number); return h *
 const lagosMinutes = (ms) => toMin(new Intl.DateTimeFormat('en-GB', { timeZone: LAGOS, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(ms)))
 const lagosWeekday = () => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(new Intl.DateTimeFormat('en-GB', { timeZone: LAGOS, weekday: 'short' }).format(new Date()))
 const WEEKDAYS = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays']
-const LATE_AFTER = 10
+const LATE_AFTER = 15 // grace time, same as the server
 const minsAgo = (iso, now) => Math.max(0, Math.round((now - new Date(iso).getTime()) / 60000))
 const ERR = {
   nobody_waiting: 'Nobody has arrived yet. Mark a patient as arrived first.',
@@ -74,12 +74,8 @@ export default function HospitalHome() {
   const [walkIns, setWalkIns] = useState([])
   const [walkName, setWalkName] = useState('')
   const [day, setDay] = useState(null) // null = today
-  const [moving, setMoving] = useState(null) // appointment to move to front
   const [cancelDay, setCancelDay] = useState(false)
   const [search, setSearch] = useState('')
-  // The 3-step guide shows the first time on each computer; the ? button brings it back.
-  const [help, setHelp] = useState(() => { try { return !localStorage.getItem('oma_desk_help_seen') } catch { return true } })
-  const closeHelp = () => { setHelp(false); try { localStorage.setItem('oma_desk_help_seen', '1') } catch { /* private mode */ } }
   const isStaff = user && (user.role === 'manager' || user.role === 'staff')
 
   const flash = (ok, text) => { setToast({ ok, text }); setTimeout(() => setToast(null), 3500) }
@@ -191,11 +187,7 @@ export default function HospitalHome() {
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <p className="m-0 text-sm text-muted">{new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Africa/Lagos' }).format(day ? new Date(`${day}T12:00:00Z`) : new Date())}</p>
-              <h1 className="m-0 flex items-center gap-2.5 text-[28px] font-extrabold leading-tight">
-                {isToday ? 'Today’s bookings' : 'Upcoming bookings'}
-                <button type="button" onClick={() => (help ? closeHelp() : setHelp(true))} aria-label="How to use this page" aria-expanded={help}
-                  className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-line bg-white font-display text-base font-extrabold text-plum hover:bg-plum-tint">?</button>
-              </h1>
+              <h1 className="m-0 text-[28px] font-extrabold leading-tight">{isToday ? 'Today’s bookings' : 'Upcoming bookings'}</h1>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <div role="tablist" aria-label="Day" className="flex rounded-2xl bg-white p-1 ring-1 ring-line">
@@ -207,24 +199,33 @@ export default function HospitalHome() {
             </div>
           </div>
 
-          {help && isToday && (
-            <section aria-label="How to use this page" className="relative rounded-[22px] bg-plum-tint p-5 ring-1 ring-plum-soft">
-              <button type="button" onClick={closeHelp} aria-label="Close the guide" className="absolute right-3 top-3 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border-0 bg-white/70 text-muted hover:bg-white">✕</button>
-              <h2 className="m-0 mb-3 text-base font-bold">How to use this page</h2>
-              <ol className="m-0 grid list-none gap-3 p-0 sm:grid-cols-3">
-                {[
-                  ['Patient arrives', 'Find them under “Not arrived yet” (or search their name) and tap Arrived.'],
-                  ['Doctor is free', 'Tap Call next. Their phone rings and the waiting-room screen shows their number.'],
-                  ['Patient comes out', 'Tap Seen. Then Call next again.'],
-                ].map(([h, b], i) => (
-                  <li key={h} className="flex gap-3 rounded-2xl bg-white p-3.5">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-plum font-display font-extrabold text-white">{i + 1}</span>
-                    <span><b className="block text-[15px]">{h}</b><span className="text-sm text-muted">{b}</span></span>
-                  </li>
-                ))}
-              </ol>
-              <p className="m-0 mt-3 text-[13px] text-muted">Didn’t come in 10 min? Tap No-show and call the next person. Emergency? Tap ↑ Move up.</p>
-            </section>
+          {isToday && (
+            <details className="group rounded-[22px] bg-plum-tint ring-1 ring-plum-soft">
+              <summary className="flex cursor-pointer list-none items-center gap-2 px-5 py-3.5 text-[15px] font-bold text-plum [&::-webkit-details-marker]:hidden">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5v14zM4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5" /></svg>
+                Guide: how to use this page
+                <svg className="ml-auto transition-transform group-open:rotate-180" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+              </summary>
+              <div className="px-5 pb-5">
+                <ol className="m-0 grid list-none gap-3 p-0 sm:grid-cols-3">
+                  {[
+                    ['Patient arrives', 'Find them under “Not arrived yet” (or search their name) and tap Arrived.'],
+                    ['Doctor is free', 'Tap Call next. Their phone rings and the waiting-room screen shows their number.'],
+                    ['Patient comes out', 'Tap Seen. Then Call next again.'],
+                  ].map(([h, b], i) => (
+                    <li key={h} className="flex gap-3 rounded-2xl bg-white p-3.5">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-plum font-display font-extrabold text-white">{i + 1}</span>
+                      <span><b className="block text-[15px]">{h}</b><span className="text-sm text-muted">{b}</span></span>
+                    </li>
+                  ))}
+                </ol>
+                <ul className="m-0 mt-3 flex list-disc flex-col gap-1 pl-5 text-[13px] text-muted">
+                  <li><b className="text-ink">Late:</b> not here 15 min after their time. Call the next person. When they come, tap Arrived and they join behind the people already waiting.</li>
+                  <li><b className="text-ink">No-show:</b> called but didn’t go in. After the grace time, tap No-show and call the next person.</li>
+                  <li><b className="text-ink">Walk-ins:</b> type their name and tap Log. When the walk-in doctor has seen them, tap Seen. If they went home without being seen, tap Went home.</li>
+                </ul>
+              </div>
+            </details>
           )}
 
           <div role="tablist" aria-label="Departments" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
@@ -291,9 +292,7 @@ export default function HospitalHome() {
               <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Find a patient: name or number"
                 aria-label="Find a patient by name or number" className={`${input} min-h-11`} />
               <QueueList title={`Waiting · ${waiting.length}`} empty={q ? 'Nobody waiting matches that.' : 'Nobody here yet. When a patient arrives, find them below and tap Arrived.'} items={waiting} busyId={busyId}
-                actions={(a, i) => i > 0 && (
-                  <button type="button" onClick={() => setMoving(a)} title="Move to the front (emergency)" className="min-h-9 cursor-pointer rounded-lg border border-line bg-white px-2.5 text-xs font-semibold text-rose hover:bg-blush">↑ Move up</button>
-                )} />
+                />
               <QueueList title={`Not arrived yet · ${expected.length}`} empty={q ? 'Nobody expected matches that.' : 'No more bookings expected today.'} items={expected} busyId={busyId} isLate={isLate}
                 actions={(a) => (
                   <button type="button" disabled={busyId === a.id} onClick={() => act(a.id, `/staff/appointments/${a.id}/check-in`, null, `#${a.queueNumber} has arrived.`)} className="min-h-10 cursor-pointer rounded-xl border-0 bg-[#1d6b3a] px-3.5 text-sm font-bold text-white hover:bg-[#165a30] disabled:opacity-50">Arrived</button>
@@ -302,7 +301,7 @@ export default function HospitalHome() {
                 <details className="rounded-[22px] bg-white p-4 ring-1 ring-line">
                   <summary className="cursor-pointer text-sm font-bold text-muted">Finished today · {done.length}</summary>
                   <div className="mt-3"><QueueList bare items={done} busyId={busyId} actions={(a) => a.status === 'no_show' && (
-                    <button type="button" disabled={busyId === a.id} onClick={() => act(a.id, `/staff/appointments/${a.id}/requeue`, null, `#${a.queueNumber} is back in the queue.`)} className="min-h-10 cursor-pointer rounded-xl border border-line bg-white px-3 text-sm font-semibold text-plum hover:bg-plum-tint">Arrived late</button>
+                    <button type="button" disabled={busyId === a.id} onClick={() => act(a.id, `/staff/appointments/${a.id}/requeue`, null, `#${a.queueNumber} is back in the queue.`)} className="min-h-10 cursor-pointer rounded-xl border border-line bg-white px-3 text-sm font-semibold text-plum hover:bg-plum-tint">Arrived now</button>
                   )} /></div>
                 </details>
               )}
@@ -325,10 +324,10 @@ export default function HospitalHome() {
                       {w.status === 'waiting' ? (
                         <span className="flex gap-1.5">
                           <button type="button" disabled={busyId === w.id} onClick={() => walkStatus(w, 'seen')} className="min-h-9 cursor-pointer rounded-lg border-0 bg-[#1d6b3a] px-3 text-xs font-bold text-white">Seen</button>
-                          <button type="button" disabled={busyId === w.id} onClick={() => walkStatus(w, 'left')} className="min-h-9 cursor-pointer rounded-lg border border-line bg-white px-3 text-xs font-semibold text-muted">Left</button>
+                          <button type="button" disabled={busyId === w.id} onClick={() => walkStatus(w, 'left')} className="min-h-9 cursor-pointer rounded-lg border border-line bg-white px-3 text-xs font-semibold text-muted">Went home</button>
                         </span>
                       ) : (
-                        <button type="button" onClick={() => walkStatus(w, 'waiting')} className="cursor-pointer border-0 bg-transparent text-xs font-semibold text-muted underline">{w.status === 'seen' ? 'Seen' : 'Left'} · undo</button>
+                        <button type="button" onClick={() => walkStatus(w, 'waiting')} className="cursor-pointer border-0 bg-transparent text-xs font-semibold text-muted underline">{w.status === 'seen' ? 'Seen' : 'Went home'} · undo</button>
                       )}
                     </li>
                   ))}
@@ -344,23 +343,6 @@ export default function HospitalHome() {
             </button>
           )}
         </div>
-      )}
-
-      {moving && (
-        <Modal title={`Move #${moving.queueNumber} to the front?`} onClose={() => setMoving(null)}>
-          <form className="flex flex-col gap-3.5" onSubmit={(e) => {
-            e.preventDefault()
-            const reason = new FormData(e.currentTarget).get('reason').toString().trim()
-            if (reason.length < 2) return flash(false, 'Please give a reason.')
-            const a = moving
-            setMoving(null)
-            act(a.id, `/staff/appointments/${a.id}/move-to-front`, { reason }, `#${a.queueNumber} moved to the front.`)
-          }}>
-            <p className="m-0 text-sm text-muted">For emergencies or very sick patients. The reason is saved in the action log.</p>
-            <input name="reason" className={input} placeholder="e.g. High fever, child" autoFocus />
-            <button type="submit" className={pinkBtn}>Move to front</button>
-          </form>
-        </Modal>
       )}
 
       {cancelDay && (

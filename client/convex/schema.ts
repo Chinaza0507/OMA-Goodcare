@@ -135,6 +135,7 @@ export default defineSchema({
     patientName: v.string(),
     date: v.string(),
     time: v.string(), // start of the booked slot, 'HH:MM'
+    lineTime: v.optional(v.string()), // late arrivals: their place in line is when they arrived, not their booked time
     queueNumber: v.number(),
     status: apptStatus,
     depositNaira: v.number(),
